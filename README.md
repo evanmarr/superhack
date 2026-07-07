@@ -16,3 +16,5 @@
     To run:
       Run this:
         $ s-hack
+
+For educational purposes only.
