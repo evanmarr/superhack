@@ -3,6 +3,8 @@
 # SuperHack - Penetration Testing Automation Framework
 # For authorized security testing only
 # Compatible with Raspberry Pi (ARM architecture)
+# Copywrite 2026 Evan Marr
+# FOR EDUCATIONAL PURPOSES ONLY!!!
 
 VERSION="2.0"
 CONFIG_DIR="$HOME/.superhack"
