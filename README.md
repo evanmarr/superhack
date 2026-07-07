@@ -1,4 +1,4 @@
-<img width="568" height="403" alt="demo-image" src="https://github.com/user-attachments/assets/61d09294-ffff-42bf-89f3-a4df4271d31d" />
+<img width="568" height="424" alt="demo-image" src="https://github.com/user-attachments/assets/4f54b96c-6289-4120-a0b6-b52bb67e9b58" />
 
     To install:
       Run this command in your linux terminal:
