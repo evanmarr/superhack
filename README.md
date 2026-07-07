@@ -24,4 +24,5 @@
         $ s-hack
 
     DEMO IMAGE:
-    <img width="568" height="403" alt="demo-image" src="https://github.com/user-attachments/assets/d3267bcf-51a4-4e81-8144-ea04e695c052" />
+    <img width="568" height="403" alt="demo-image" src="https://github.com/user-attachments/assets/9e8703d0-e80d-4c60-b209-641fc06c4800" />
+
