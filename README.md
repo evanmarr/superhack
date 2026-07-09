@@ -1,12 +1,12 @@
 ![SuperHack Demo Image](https://github.com/user-attachments/assets/4f54b96c-6289-4120-a0b6-b52bb67e9b58)
 
-> **Raspberry Pi Edition v2.1** | **Authorized Use Only**
+> **Raspberry Pi Edition v3.0** | **Authorized Use Only**
 
 ---
 
 ## Overview
 
-SuperHack is a comprehensive penetration testing automation framework designed for Linux systems (including ARM/Raspberry Pi). It provides an interactive menu-driven interface for common security testing tasks, including network scanning, enumeration, brute force attacks, payload generation, and wireless security auditing.
+SuperHack is a comprehensive penetration testing automation framework designed for Linux systems (including ARM/Raspberry Pi). It provides an interactive menu-driven interface for common security testing tasks, including network scanning, enumeration, brute force attacks, payload generation, wireless security auditing, phishing campaigns, OSINT gathering, and defensive tools.
 
 **⚠️ For educational and authorized security testing purposes only. Use responsibly and only on systems you own or have explicit permission to test.**
 
@@ -17,13 +17,19 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 - **Network Discovery** - Scan subnets for live hosts using nmap
 - **Advanced Nmap Scanner** - Customizable scans with SYN, UDP, stealth, OS detection, and script scanning
 - **SMB Enumeration** - Enumerate Windows/Samba shares and users with enum4linux-ng
+- **LDAP/AD Enumeration** - Active Directory reconnaissance and BloodHound data collection
 - **Web Enumeration** - Directory brute-forcing with Gobuster and vulnerability scanning with Nikto
-- **Brute Force** - Multi-protocol brute forcing (SSH, FTP, SMB, HTTP) with Hydra
-- **Payload Generator** - Generate Metasploit payloads (Linux x86/x64, Windows, Python)
+- **Subdomain Enumeration** - DNS brute force and certificate transparency logs
+- **Brute Force** - Multi-protocol brute forcing (SSH, FTP, SMB, HTTP, RDP, VNC, Telnet) with Hydra
+- **Payload Generator** - Generate Metasploit payloads (Linux x86/x64, Windows, Python, PHP, Android)
 - **Password Cracking** - Hash cracking with John the Ripper and Hashcat
 - **Exploit Search** - Search Exploit-DB via searchsploit
-- **WiFi Scanner** - Network discovery, device enumeration, and monitor mode packet capture
+- **Phishing Tools** - Website cloning, credential harvesting, email spoofing, QR code phishing, USB drop attacks
+- **WiFi Scanner** - Network discovery, WPA/WPA2 handshake capture/cracking, WPS attacks, Evil Twin APs
 - **SQL Injection** - Automated SQLMap wrapper for web application testing
+- **OSINT** - Domain reconnaissance, email harvesting, social media reconnaissance, Shodan integration
+- **Blue Team** - Secure password generation, virus scanning, rootkit detection, file integrity monitoring
+- **Autopwn** - Automated exploitation against IP addresses and URLs
 - **Netcat Listener** - Quick reverse shell listener setup
 - **Smart Dependency Manager** - Automatic detection and installation of required tools
 
@@ -43,40 +49,47 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 1. **Clone the repository:**
 
    ```bash
-    sudo git clone https://github.com/evanmarr/superhack.git ~/.superhack/
+   sudo git clone https://github.com/evanmarr/superhack.git ~/.superhack/
    ```
+
 2. **Create the alias:**
 
    ```bash
-    cd && nano .bashrc
+   cd && nano .bashrc
    ```
+
 3. **Add the following line at the bottom of the file:**
 
    ```bash
-    alias s-hack='sudo bash ~/.superhack/main.sh'
+   alias s-hack='sudo bash ~/.superhack/main.sh'
    ```
+
    For a cooler look, run this in your terminal:
-   ```bash
-    sudo apt-get install lolcat -y
-   ```
-
-   And in ~/.bashrc, put this in:
 
    ```bash
-    alias s-hack='sudo bash ~/.superhack/main.sh | lolcat'
+   sudo apt-get install lolcat -y
    ```
 
-5. **Save and exit:***
+   And in `~/.bashrc`, put this in:
 
-    Press ^O (Ctrl+O), then Enter to save
-    Press ^X (Ctrl+X) to exit
-    Reload your shell configuration:
+   ```bash
+   alias s-hack='sudo bash ~/.superhack/main.sh | lolcat'
+   ```
 
-    ```bash
-     source ~/.bashrc
-    ```
+4. **Save and exit:**
+
+   - Press `^O` (Ctrl+O), then Enter to save
+   - Press `^X` (Ctrl+X) to exit
+
+5. **Reload your shell configuration:**
+
+   ```bash
+   source ~/.bashrc
+   ```
 
 6. **You're all set!**
+
+---
 
 ## Usage
 
@@ -88,142 +101,160 @@ s-hack
 
 Upon running, the script will check for required dependencies and prompt to install any missing packages.
 
+---
+
 ## Directory Structure
 
-SuperHack creates the following directory structure in ~/.superhack/:
+SuperHack creates the following directory structure in `~/.superhack/`:
 
 ```text
 ~/.superhack/
 ├── logs/                 # Application logs
 ├── wordlists/            # Downloaded wordlists (rockyou.txt, SecLists)
+├── phishing/             # Phishing campaign files
+│   ├── templates/        # Phishing page templates
+│   └── captured/         # Captured credentials/data
+├── credentials/          # Harvested credentials storage
+├── osint/                # OSINT data storage
 └── results/
     ├── nmap/             # Network scan results
-    ├── enumeration/      # Enumeration output (SMB, web)
+    ├── enumeration/      # Enumeration output (SMB, web, LDAP)
     ├── exploitation/     # Payloads and exploit data
-    ├── wifi/             # Wireless scan results
+    ├── wifi/             # Wireless scan results and handshakes
     ├── bruteforce/       # Hydra brute force results
-    └── cracking/         # Password cracking output
+    ├── cracking/         # Password cracking output
+    ├── trojans/          # Generated payload storage
+    ├── osint/            # OSINT reports
+    ├── blueteam/         # Defensive scan results
+    └── autopwn/          # Automated exploitation reports
 ```
 
+---
 
+## Modules
 
-### Modules
-1. **Network Discovery**
-   
-    Scan entire subnets to discover live hosts using nmap ping sweeps.
+### 1. Network Scanning
+- **Network Discovery** - Scan entire subnets to discover live hosts using nmap ping sweeps
+- **Advanced Nmap Scanner** - Fully customizable nmap scanning with options for:
+  - Scan types: SYN, Connect, UDP, ACK, Window, FIN/NULL/Xmas
+  - Port selection: Top 100/1000, all ports, or custom ranges
+  - Service/version detection and OS fingerprinting
+  - NSE script scanning (safe, vuln, all, or custom)
+  - Timing templates (T0-T5) and fragmentation options
 
-3. **Advanced Nmap Scanner**
-   
-    Fully customizable nmap scanning with options for:
+### 2. Enumeration
+- **SMB Enumeration** - Enumerate Windows/Samba shares, users, and security policies using enum4linux-ng
+- **LDAP/AD Enumeration** - Active Directory reconnaissance including:
+  - Anonymous LDAP bind
+  - Authenticated LDAP queries
+  - User enumeration
+  - BloodHound data collection
+- **Web Enumeration** - Directory/file brute-forcing with Gobuster and vulnerability scanning with Nikto
+- **Subdomain Enumeration** - DNS brute force, certificate transparency logs, and zone transfer attempts
 
-    Scan types: SYN, Connect, UDP, ACK, Window, FIN/NULL/Xmas
-    Port selection: Top 100/1000, all ports, or custom ranges
-    Service/version detection and OS fingerprinting
-    NSE script scanning (safe, vuln, all, or custom)
-    Timing templates (T0-T5) and fragmentation options
-5. **SMB Enumeration**
-   
-    Enumerate Windows/Samba shares, users, and security policies using enum4linux-ng.
+### 3. Brute Force
+Multi-protocol brute forcing supporting:
+- SSH, FTP, SMB, HTTP Basic Auth, HTTP Form POST, RDP, VNC, Telnet
+- Uses Hydra with customizable username lists and wordlists
 
-7. **Web Enumeration**
-   
-    Directory/file brute-forcing with Gobuster
-    Vulnerability scanning with Nikto
-    Automatic wordlist selection from SecLists
-9. **Brute Force**
-    
-    Multi-protocol brute forcing supporting:
+### 4. Payload Generator
+Generate Metasploit payloads via msfvenom:
+- Linux x86/x64 reverse shells
+- Windows reverse shells and Meterpreter
+- Python, PHP, ASP.NET reverse shells
+- Android APK payloads
+- Custom payload specification
 
-    SSH
-    FTP
-    SMB
-    HTTP Basic Authentication
-    Uses Hydra with customizable username lists and wordlists.
+### 5. Exploit Search
+Search Exploit-DB for known vulnerabilities using searchsploit with detailed exploit viewing.
 
-11. **Payload Generator**
-    
-    Generate Metasploit payloads via msfvenom:
+### 6. Password Cracking
+- **John the Ripper** - Auto-detect or specify hash formats
+- **Hashcat** - GPU-accelerated cracking with mode selection
+- **Hash Type Identification** - Identify unknown hash formats
 
-    Linux x86/x64 reverse shells
-    Windows reverse shells
-    Python reverse shells
-    Custom payload specification
-13. **Password Cracking**
-    
-    John the Ripper - Auto-detect or specify hash formats
-    Hashcat - GPU-accelerated cracking with mode selection
-15. **Exploit Search**
-    
-    Search Exploit-DB for known vulnerabilities using searchsploit.
+### 7. Phishing Tools
+- **Website Cloning** - Clone websites for credential harvesting with built-in PHP capture scripts
+- **Custom Phishing Pages** - Generate corporate, social media, banking, or custom login pages
+- **Email Spoofing** - Send spoofed emails using sendemail
+- **QR Code Phishing** - Generate malicious QR codes
+- **USB Drop Attacks** - Create autorun payloads for USB devices
 
-17. **Netcat Listener**
-    
-    Quick setup for reverse shell listeners.
+### 8. Wireless Attacks
+- Access point discovery and monitoring
+- WPA/WPA2 handshake capture and cracking
+- WPS PIN attacks (Reaver)
+- Deauthentication attacks
+- Evil Twin fake access point creation
+- WiFi brute forcer with automated handshake capture
 
-19. **WiFi Scanner**
-    
-    Comprehensive wireless security testing:
+### 9. SQL Injection
+Automated SQLMap wrapper for detecting and exploiting SQL injection vulnerabilities.
 
-    Access point discovery
-    Device enumeration on current network (ARP scan, nmap, netdiscover)
-    Monitor mode packet capture with airodump-ng
-    Continuous monitoring for new device detection
-21. **SQL Injection Scan**
-    
-    Automated SQLMap wrapper for detecting SQL injection vulnerabilities.
+### 10. OSINT
+- **Domain Information** - DNS records, subdomain enumeration, IP information
+- **Email OSINT** - Email harvesting with theHarvester
+- **Social Media Recon** - Username checking across multiple platforms
+- **Metadata Extraction** - Extract metadata from files using exiftool
+- **Shodan Search** - Query Shodan for internet-facing devices
+- **Full OSINT Report** - Comprehensive automated reconnaissance
 
-23. **Dependency Manager**
-    
-    ### Smart package manager that:
+### 11. Blue Team
+- **Secure Password Generator** - Generate strong passwords and passphrases
+- **Virus Scanning** - ClamAV integration for malware detection
+- **Rootkit Detection** - rkhunter and chkrootkit scanning
+- **File Integrity Monitoring** - Create baselines and detect changes
+- **Network Monitoring** - Monitor active connections and listening ports
+- **System Hardening Check** - Audit SSH, firewall, services, and SUID files
 
-    Detects missing system packages (apt)
-    Detects missing Python packages (pip)
-    Downloads wordlists (rockyou.txt, SecLists)
-    Selective or bulk installation
-    Required Dependencies
-    ### Core System Packages:
-    ```text
-    nmap,
-    metasploit-framework,
-    netcat-traditional
-    hydra,
-    gobuster,
-    dirb,
-    enum4linux-ng
-    john,
-    hashcat,
-    sqlmap,
-    nikto,
-    masscan
-    aircrack-ng,
-    wireless-tools,
-    tcpdump
-    python3,
-    python3-pip,
-    git,
-    curl,
-    wget
-    ```
-    ### Python Packages
-    ```text
-    impacket,
-    requests,
-    beautifulsoup4
-    scapy,
-    pwntools,
-    python-nmap
-    ```
+### 12. Autopwn
+- **Autopwn IP** - Automated exploitation against IP addresses with full enumeration
+- **Autopwn URL** - Automated web application testing with vulnerability scanning
+
+### 13. Utilities
+- **Network Listener** - Quick reverse shell listener setup
+- **Quick Reverse Shell** - Generate one-liner reverse shells in multiple languages
+- **View Logs** - Browse session logs
+
+---
+
+## Required Dependencies
+
+### Core System Packages
+```text
+nmap, metasploit-framework, netcat-traditional, hydra, gobuster
+dirb, enum4linux-ng, john, hashcat, sqlmap, nikto, masscan
+dnsutils, whois, curl, wget, git, iw, tcpdump, proxychains4
+wireless-tools, aircrack-ng, python3, python3-pip, arp-scan
+netdiscover, macchanger, crackmapexec, responder, bloodhound.py
+wireshark, tshark, bettercap, mitmproxy, httrack, sendemail
+openssl, sshpass, tmux, screen, vim, nano, lolcat, clamav
+clamav-daemon, rkhunter, chkrootkit, haveged, libreoffice
+exiftool, theharvester, maltego, spiderfoot, recon-ng, photon
+```
+
+### Python Packages
+```text
+impacket, requests, beautifulsoup4, scapy, pwntools, python-nmap
+smbprotocol, ldap3, pyftpdlib, pysmb, paramiko, cryptography
+pyOpenSSL, flask, django, mechanize, selenium, pyautogui
+shodan, censys, requests-html, social-analyzer, holehe
+```
+
+---
 
 ## SECURITY NOTICE
 
-***This tool is intended for authorized security testing and educational purposes only.***
+**This tool is intended for authorized security testing and educational purposes only.**
 
-***Only use on systems you own or have explicit written permission to test***
-***Unauthorized access to computer systems is illegal***
-***The authors assume no liability for misuse of this software***
-***Always follow responsible disclosure practices***
+- Only use on systems you own or have explicit written permission to test
+- Unauthorized access to computer systems is illegal
+- The authors assume no liability for misuse of this software
+- Always follow responsible disclosure practices
 
-## Author:
+---
+
+## Author
 Evan Marr - 2026
 
 ## License
