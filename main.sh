@@ -2351,7 +2351,7 @@ EOF
         echo "2) Email OSINT (theHarvester)"
         echo "3) Social Media Reconnaissance"
         echo "4) Metadata Extraction"
-        echo "5) Shodan Search"
+        echo "5) Shodan Search (API key Required)"
         echo "6) DNS Enumeration"
         echo "7) WHOIS Lookup"
         echo "8) Full OSINT Report (All Tools)"
