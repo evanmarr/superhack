@@ -1,6 +1,5 @@
 <img width="1138" height="814" alt="demo-image-1" src="https://github.com/user-attachments/assets/84b50182-4436-4660-a6d9-4edb5621dace" />
-
-
+\n\n
 <img width="1138" height="814" alt="demo-image-2" src="https://github.com/user-attachments/assets/c1ccd93e-c865-44ba-b69b-fc4bc4856e82" />
 
 > **Raspberry Pi Edition v3.0** | **Authorized Use Only**
