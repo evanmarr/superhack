@@ -55,7 +55,7 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 1. **Clone the repository:**
 
    ```bash
-   sudo git clone https://github.com/evanmarr/superhack.git ~/.superhack/
+   mkdir -p ~/.superhack && curl -L https://raw.githubusercontent.com/evanmarr/superhack/main/main.sh -o ~/.superhack/main.sh
    ```
 
 2. **Create the alias:**
@@ -68,18 +68,6 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 
    ```bash
    alias s-hack='sudo bash ~/.superhack/main.sh'
-   ```
-
-   For a cooler look, run this in your terminal:
-
-   ```bash
-   sudo apt-get install lolcat -y
-   ```
-
-   And in `~/.bashrc`, put this in:
-
-   ```bash
-   alias s-hack='sudo bash ~/.superhack/main.sh | lolcat'
    ```
 
 4. **Save and exit:**
@@ -103,6 +91,18 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 
 ```bash
 s-hack
+```
+
+For a cooler look, run this in your terminal:
+
+```bash
+sudo apt-get install lolcat -y
+```
+
+Then, to run, enter this:
+
+```bash
+s-hack | lolcat
 ```
 
 Upon running, the script will check for required dependencies and prompt to install any missing packages.
