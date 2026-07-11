@@ -107,7 +107,7 @@ sudo apt-get install lolcat -y
 Then, to run, enter this:
 
 ```bash
-s-hack | lolcat
+s-hack | lolcat --seed 17
 ```
 
 Upon running, the script will check for required dependencies and prompt to install any missing packages.
