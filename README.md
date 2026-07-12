@@ -5,11 +5,11 @@
 
 ### Startup package checking
 
-<img width="1138" height="814" alt="demo-image-1" src="https://github.com/user-attachments/assets/84b50182-4436-4660-a6d9-4edb5621dace" />
+<img width="1138" height="814" alt="demo-image-1" src="https://github.com/user-attachments/assets/c596bb23-6375-4131-8c75-677e0fb9d93a" />
 
 ### Main screen
 
-<img width="1138" height="814" alt="demo-image-2" src="https://github.com/user-attachments/assets/c1ccd93e-c865-44ba-b69b-fc4bc4856e82" />
+<img width="1138" height="814" alt="demo-image-2" src="https://github.com/user-attachments/assets/a5453d74-cec1-486b-8a58-48bcccfcb2b1" />
 
 > **Raspberry Pi Edition v3.0** | **Authorized Use Only**
 
