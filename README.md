@@ -21,6 +21,8 @@ SuperHack is a comprehensive penetration testing automation framework designed f
 
 **⚠️ For educational and authorized security testing purposes only. Use responsibly and only on systems you own or have explicit permission to test.**
 
+**NOTICE: Some features are still beiing debugged and may not work. If so, please report to us using github. Thank you for your contribution!**
+
 ---
 
 ## Installation
