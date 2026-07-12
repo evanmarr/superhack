@@ -95,52 +95,53 @@ Upon running, the script will check for required dependencies and prompt to inst
 
 SuperHack creates the following directory structure in `~/.superhack/`:
 
-```text
-~/.superhack/
-├── logs/                 # Application logs
-├── wordlists/            # Downloaded wordlists (rockyou.txt, SecLists)
-├── phishing/             # Phishing campaign files
-│   ├── templates/        # Phishing page templates
-│   └── captured/         # Captured credentials/data
-├── credentials/          # Harvested credentials storage
-├── osint/                # OSINT data storage
-└── results/
-    ├── nmap/             # Network scan results
-    ├── enumeration/      # Enumeration output (SMB, web, LDAP)
-    ├── exploitation/     # Payloads and exploit data
-    ├── wifi/             # Wireless scan results and handshakes
-    ├── bruteforce/       # Hydra brute force results
-    ├── cracking/         # Password cracking output
-    ├── trojans/          # Generated payload storage
-    ├── osint/            # OSINT reports
-    ├── blueteam/         # Defensive scan results
-    └── autopwn/          # Automated exploitation reports
-```
+   ```text
+   ~/.superhack/
+   ├── logs/                 # Application logs
+   ├── wordlists/            # Downloaded wordlists (rockyou.txt, SecLists)
+   ├── phishing/             # Phishing campaign files
+   │   ├── templates/        # Phishing page templates
+   │   └── captured/         # Captured credentials/data
+   ├── credentials/          # Harvested credentials storage
+   ├── osint/                # OSINT data storage
+   └── results/
+       ├── nmap/             # Network scan results
+       ├── enumeration/      # Enumeration output (SMB, web, LDAP)
+       ├── exploitation/     # Payloads and exploit data
+       ├── wifi/             # Wireless scan results and handshakes
+       ├── bruteforce/       # Hydra brute force results
+       ├── cracking/         # Password cracking output
+       ├── trojans/          # Generated payload storage
+       ├── osint/            # OSINT reports
+       ├── blueteam/         # Defensive scan results
+       └── autopwn/          # Automated exploitation reports
+   ```
 
 ---
 
 ## Required Dependencies
 
 ### Core System Packages
-```text
-nmap, metasploit-framework, netcat-traditional, hydra, gobuster
-dirb, enum4linux-ng, john, hashcat, sqlmap, nikto, masscan
-dnsutils, whois, curl, wget, git, iw, tcpdump, proxychains4
-wireless-tools, aircrack-ng, python3, python3-pip, arp-scan
-netdiscover, macchanger, crackmapexec, responder, bloodhound.py
-wireshark, tshark, bettercap, mitmproxy, httrack, sendemail
-openssl, sshpass, tmux, screen, vim, nano, lolcat, clamav
-clamav-daemon, rkhunter, chkrootkit, haveged, libreoffice
-exiftool, theharvester, maltego, spiderfoot, recon-ng, photon
-```
+   ```text
+   nmap, metasploit-framework, netcat-traditional, hydra, gobuster
+   dirb, enum4linux-ng, john, hashcat, sqlmap, nikto, masscan
+   dnsutils, whois, curl, wget, git, iw, tcpdump, proxychains4
+   wireless-tools, aircrack-ng, python3, python3-pip, arp-scan
+   netdiscover, macchanger, crackmapexec, responder, bloodhound.py
+   wireshark, tshark, bettercap, mitmproxy, httrack, sendemail
+   openssl, sshpass, tmux, screen, vim, nano, lolcat, clamav
+   clamav-daemon, rkhunter, chkrootkit, haveged, libreoffice
+   exiftool, theharvester, maltego, spiderfoot, recon-ng, photon
+   ```
 
 ### Python Packages
-```text
-impacket, requests, beautifulsoup4, scapy, pwntools, python-nmap
-smbprotocol, ldap3, pyftpdlib, pysmb, paramiko, cryptography
-pyOpenSSL, flask, django, mechanize, selenium, pyautogui
-shodan, censys, requests-html, social-analyzer, holehe
-```
+
+   ```text
+   impacket, requests, beautifulsoup4, scapy, pwntools, python-nmap
+   smbprotocol, ldap3, pyftpdlib, pysmb, paramiko, cryptography
+   pyOpenSSL, flask, django, mechanize, selenium, pyautogui
+   shodan, censys, requests-html, social-analyzer, holehe
+   ```
 
 ---
 
